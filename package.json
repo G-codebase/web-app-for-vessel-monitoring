@@ -1,0 +1,14 @@
+{
+  "name": "tanker-vessel-monitor",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "dev": "concurrently -n \"SERVER,CLIENT\" -c \"blue,cyan\" \"npm run dev:server\" \"npm run dev:client\"",
+    "build": "npm --prefix server run build && npm --prefix client run build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

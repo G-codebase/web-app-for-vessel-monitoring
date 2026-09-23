@@ -1,0 +1,91 @@
+import { store } from '../../database/inMemoryStore.js';
+import { analyticsService } from '../analytics/analyticsService.js';
+
+export class ReportsService {
+  public generateDailyVesselReport(vesselId: string = 'VESSEL-001') {
+    const vessel = store.vessels.find((v) => v.vesselId === vesselId) || store.vessels[0];
+    const tanks = Object.values(store.tanks);
+    const alarms = store.alarms.filter((a) => a.vesselId === vesselId);
+
+    const tempValues = tanks.map((t) => t.temperatureC);
+    const pressValues = tanks.map((t) => t.pressureMbar);
+
+    const avgTemp = (tempValues.reduce((a, b) => a + b, 0) / tempValues.length).toFixed(2);
+    const maxTemp = Math.max(...tempValues).toFixed(2);
+    const minTemp = Math.min(...tempValues).toFixed(2);
+
+    const avgPress = (pressValues.reduce((a, b) => a + b, 0) / pressValues.length).toFixed(2);
+    const maxPress = Math.max(...pressValues).toFixed(2);
+    const minPress = Math.min(...pressValues).toFixed(2);
+
+    return {
+      reportId: `REP-DLY-${Date.now().toString().slice(-6)}`,
+      reportType: 'VESSEL_DAILY_OPERATIONS_REPORT',
+      generatedAt: new Date().toISOString(),
+      vessel: {
+        vesselId: vessel.vesselId,
+        name: vessel.name,
+        imo: vessel.imo,
+        type: vessel.type,
+        flag: vessel.flag,
+      },
+      systemAvailabilityPct: 99.98,
+      cargoTotalVolumeM3: vessel.cargoVolumeM3,
+      cargoFillPct: vessel.cargoFillPct,
+      ballastVolumeM3: vessel.ballastVolumeM3,
+      fuelVolumeM3: vessel.fuelVolumeM3,
+      draft: store.draft,
+      temperatureStats: {
+        averageC: parseFloat(avgTemp),
+        maximumC: parseFloat(maxTemp),
+        minimumC: parseFloat(minTemp),
+      },
+      pressureStats: {
+        averageMbar: parseFloat(avgPress),
+        maximumMbar: parseFloat(maxPress),
+        minimumMbar: parseFloat(minPress),
+      },
+      tanks: tanks.map((t) => ({
+        tankId: t.tankId,
+        name: t.name,
+        fillPct: t.fillingPercentage,
+        volumeM3: t.volumeM3,
+        temperatureC: t.temperatureC,
+        pressureMbar: t.pressureMbar,
+        flowRateM3H: t.flowRateM3H,
+        status: t.status,
+      })),
+      alarms: alarms.map((a) => ({
+        alarmId: a.alarmId,
+        title: a.title,
+        severity: a.severity,
+        state: a.state,
+        raisedAt: a.raisedAt,
+      })),
+    };
+  }
+
+  public exportDailyReportCsv(vesselId: string = 'VESSEL-001'): string {
+    const report = this.generateDailyVesselReport(vesselId);
+    let csv = `SJV MARINE TANKER MONITOR - DAILY COMPLIANCE REPORT\n`;
+    csv += `Vessel,${report.vessel.name} (IMO: ${report.vessel.imo})\n`;
+    csv += `Generated At,${report.generatedAt}\n`;
+    csv += `System Availability,${report.systemAvailabilityPct}%\n\n`;
+
+    csv += `CARGO TANKS SUMMARY\n`;
+    csv += `Tank ID,Name,Fill %,Volume (m3),Temp (C),Pressure (mbar),Flow Rate (m3/h),Status\n`;
+    for (const t of report.tanks) {
+      csv += `${t.tankId},"${t.name}",${t.fillPct},${t.volumeM3},${t.temperatureC},${t.pressureMbar},${t.flowRateM3H},${t.status}\n`;
+    }
+
+    csv += `\nALARMS SUMMARY\n`;
+    csv += `Alarm ID,Title,Severity,State,Raised At\n`;
+    for (const a of report.alarms) {
+      csv += `${a.alarmId},"${a.title}",${a.severity},${a.state},${a.raisedAt}\n`;
+    }
+
+    return csv;
+  }
+}
+
+export const reportsService = new ReportsService();
