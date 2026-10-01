@@ -2,36 +2,40 @@ import { store, StoredAlarm } from '../../database/inMemoryStore.js';
 import { auditService } from '../audit/auditService.js';
 
 export class AlarmEngine {
-  private recentPressureHistory: { tankId: string; timestamp: number; pressure: number }[] = [];
+  private recentPressureHistory: { vesselId: string; tankId: string; timestamp: number; pressure: number }[] = [];
 
-  public checkRateOfChange(tankId: string, currentPressure: number): StoredAlarm | null {
+  public checkRateOfChange(tankId: string, currentPressure: number, vesselId: string = 'VESSEL-001'): StoredAlarm | null {
     const now = Date.now();
-    this.recentPressureHistory.push({ tankId, timestamp: now, pressure: currentPressure });
-    // Keep last 120 seconds
+    this.recentPressureHistory.push({ vesselId, tankId, timestamp: now, pressure: currentPressure });
+
+    // Keep history strictly within last 60 seconds
     this.recentPressureHistory = this.recentPressureHistory.filter(
-      (h) => now - h.timestamp <= 120000
+      (h) => now - h.timestamp <= 60000
     );
 
-    // Look for records around 90 seconds ago (between 60s and 100s)
+    // Look for records from 5 to 30 seconds ago
     const pastRecords = this.recentPressureHistory.filter(
-      (h) => h.tankId === tankId && now - h.timestamp >= 60000
+      (h) => h.vesselId === vesselId && h.tankId === tankId && now - h.timestamp >= 5000
     );
 
     if (pastRecords.length > 0) {
-      const oldest = pastRecords[0];
-      const deltaP = currentPressure - oldest.pressure;
-      const deltaTimeSec = Math.round((now - oldest.timestamp) / 1000);
+      // Compare with the earliest available record in the 5s..30s window
+      const reference = pastRecords[0];
+      const deltaP = currentPressure - reference.pressure;
+      const deltaTimeSec = Math.max(1, Math.round((now - reference.timestamp) / 1000));
+      const ratePerMin = (deltaP / deltaTimeSec) * 60;
 
-      // Trigger if delta > 3.0 mbar within 90s
-      if (deltaP >= 3.0) {
+      // Trigger if rate of change >= 3.0 mbar/min and absolute rise >= 0.8 mbar
+      if (ratePerMin >= 3.0 && deltaP >= 0.8) {
         const existing = store.alarms.find(
-          (a) => a.locationId === tankId && a.ruleType === 'RATE_OF_CHANGE' && a.state !== 'RESOLVED'
+          (a) => a.vesselId === vesselId && a.locationId === tankId && a.ruleType === 'RATE_OF_CHANGE' && a.state !== 'RESOLVED'
         );
 
         if (!existing) {
+          const vessel = store.getVessel(vesselId);
           const newAlarm: StoredAlarm = {
             alarmId: `AL-${Date.now().toString().slice(-4)}`,
-            vesselId: 'VESSEL-001',
+            vesselId,
             sensorId: `SENS-${tankId}-PRESS-ULLAGE`,
             locationId: tankId,
             subsystem: 'CARGO',
@@ -39,14 +43,15 @@ export class AlarmEngine {
             severity: 'CRITICAL',
             state: 'ACTIVE_UNACKNOWLEDGED',
             title: `RATE-OF-CHANGE: ${tankId} Rapid Pressure Surge`,
-            message: `Pressure surged by +${deltaP.toFixed(1)} mbar within ${deltaTimeSec}s (${oldest.pressure.toFixed(1)} → ${currentPressure.toFixed(1)} mbar)`,
-            currentValue: currentPressure,
+            message: `Pressure surged by +${deltaP.toFixed(1)} mbar within ${deltaTimeSec}s (+${ratePerMin.toFixed(1)} mbar/min)`,
+            currentValue: parseFloat(currentPressure.toFixed(2)),
             thresholdValue: 3.0,
             unit: 'mbar',
-            rateOfChange: `+${deltaP.toFixed(1)} mbar in ${deltaTimeSec}s`,
+            rateOfChange: `+${ratePerMin.toFixed(1)} mbar/min`,
             raisedAt: new Date().toISOString(),
           };
           store.alarms.unshift(newAlarm);
+          this.syncVesselAlertCounts(vesselId);
           return newAlarm;
         }
       }
@@ -54,18 +59,32 @@ export class AlarmEngine {
     return null;
   }
 
+  public hasActiveAlarm(vesselId: string, locationId: string, severity?: 'CRITICAL' | 'WARNING'): boolean {
+    return store.alarms.some(
+      (a) =>
+        a.vesselId === vesselId &&
+        a.locationId === locationId &&
+        a.state !== 'RESOLVED' &&
+        (!severity || a.severity === severity)
+    );
+  }
+
   public getAlarms(vesselId?: string) {
-    if (vesselId) {
+    if (vesselId && vesselId !== 'ALL') {
       return store.alarms.filter((a) => a.vesselId === vesselId);
     }
     return store.alarms;
   }
 
-  public getSummaryStats() {
-    const active = store.alarms.filter((a) => a.state !== 'RESOLVED');
+  public getSummaryStats(vesselId?: string) {
+    const list = vesselId && vesselId !== 'ALL'
+      ? store.alarms.filter((a) => a.vesselId === vesselId)
+      : store.alarms;
+
+    const active = list.filter((a) => a.state !== 'RESOLVED');
     const critical = active.filter((a) => a.severity === 'CRITICAL');
     const warning = active.filter((a) => a.severity === 'WARNING');
-    const acknowledged = store.alarms.filter((a) => a.state === 'ACTIVE_ACKNOWLEDGED');
+    const acknowledged = list.filter((a) => a.state === 'ACTIVE_ACKNOWLEDGED');
 
     return {
       criticalCount: critical.length,
@@ -85,13 +104,14 @@ export class AlarmEngine {
     alarm.acknowledgedBy = `${user.role}: ${user.name}`;
     if (notes) alarm.notes = notes;
 
+    const vessel = store.getVessel(alarm.vesselId);
     auditService.record({
       userId: user.userId,
       userName: user.name,
-      userRole: user.role as any,
+      userRole: user.role,
       action: 'ALARM_ACKNOWLEDGE',
       vesselId: alarm.vesselId,
-      vesselName: 'MT Ocean Star',
+      vesselName: vessel.name,
       targetEntity: `${alarm.alarmId} (${alarm.title})`,
       oldValue: oldState,
       newValue: 'ACTIVE_ACKNOWLEDGED',
@@ -99,6 +119,7 @@ export class AlarmEngine {
       details: notes || `Acknowledged alarm ${alarm.title}`,
     });
 
+    this.syncVesselAlertCounts(alarm.vesselId);
     return alarm;
   }
 
@@ -112,13 +133,14 @@ export class AlarmEngine {
     alarm.resolvedBy = `${user.role}: ${user.name}`;
     if (notes) alarm.notes = notes;
 
+    const vessel = store.getVessel(alarm.vesselId);
     auditService.record({
       userId: user.userId,
       userName: user.name,
-      userRole: user.role as any,
+      userRole: user.role,
       action: 'ALARM_RESOLVE',
       vesselId: alarm.vesselId,
-      vesselName: 'MT Ocean Star',
+      vesselName: vessel.name,
       targetEntity: `${alarm.alarmId} (${alarm.title})`,
       oldValue: oldState,
       newValue: 'RESOLVED',
@@ -126,7 +148,20 @@ export class AlarmEngine {
       details: notes || `Resolved alarm ${alarm.title}`,
     });
 
+    this.syncVesselAlertCounts(alarm.vesselId);
     return alarm;
+  }
+
+  private syncVesselAlertCounts(vesselId: string) {
+    const vessel = store.vessels.find((v) => v.vesselId === vesselId);
+    if (vessel) {
+      const active = store.alarms.filter((a) => a.vesselId === vesselId && a.state !== 'RESOLVED');
+      vessel.activeAlertsCount = active.length;
+      vessel.criticalAlertsCount = active.filter((a) => a.severity === 'CRITICAL').length;
+      if (vessel.status !== 'OFFLINE') {
+        vessel.status = vessel.criticalAlertsCount > 0 ? 'CRITICAL' : vessel.activeAlertsCount > 0 ? 'WARNING' : 'ONLINE';
+      }
+    }
   }
 }
 

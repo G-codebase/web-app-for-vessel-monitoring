@@ -12,14 +12,27 @@ export class WebSocketGateway {
     this.wss.on('connection', (ws: WebSocket) => {
       this.clients.add(ws);
 
+      // Build vessel data map for all vessels
+      const vesselDataMap: Record<string, any> = {};
+      for (const vesselId of Object.keys(store.tanksByVessel)) {
+        const vessel = store.getVessel(vesselId);
+        vesselDataMap[vesselId] = {
+          tanks: store.tanksByVessel[vesselId],
+          draft: store.draftByVessel[vesselId],
+          manifolds: store.manifoldsByVessel[vesselId],
+          latencySec: vessel.latencySec,
+        };
+      }
+
       // Send initial state snapshot immediately
       const initialPayload = {
         type: 'SNAPSHOT',
         timestamp: new Date().toISOString(),
         vessels: store.vessels,
-        tanks: store.tanks,
-        draft: store.draft,
-        manifolds: store.manifolds,
+        vesselData: vesselDataMap,
+        tanks: store.getTanks('VESSEL-001'),
+        draft: store.getDraft('VESSEL-001'),
+        manifolds: store.getManifolds('VESSEL-001'),
         alarms: store.alarms,
         alarmStats: alarmEngine.getSummaryStats(),
       };

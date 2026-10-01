@@ -1,22 +1,22 @@
 import { store } from '../../database/inMemoryStore.js';
-import { analyticsService } from '../analytics/analyticsService.js';
 
 export class ReportsService {
   public generateDailyVesselReport(vesselId: string = 'VESSEL-001') {
-    const vessel = store.vessels.find((v) => v.vesselId === vesselId) || store.vessels[0];
-    const tanks = Object.values(store.tanks);
+    const vessel = store.getVessel(vesselId);
+    const tanks = Object.values(store.getTanks(vesselId));
+    const draft = store.getDraft(vesselId);
     const alarms = store.alarms.filter((a) => a.vesselId === vesselId);
 
     const tempValues = tanks.map((t) => t.temperatureC);
     const pressValues = tanks.map((t) => t.pressureMbar);
 
-    const avgTemp = (tempValues.reduce((a, b) => a + b, 0) / tempValues.length).toFixed(2);
-    const maxTemp = Math.max(...tempValues).toFixed(2);
-    const minTemp = Math.min(...tempValues).toFixed(2);
+    const avgTemp = tempValues.length ? (tempValues.reduce((a, b) => a + b, 0) / tempValues.length).toFixed(2) : '20.00';
+    const maxTemp = tempValues.length ? Math.max(...tempValues).toFixed(2) : '20.00';
+    const minTemp = tempValues.length ? Math.min(...tempValues).toFixed(2) : '20.00';
 
-    const avgPress = (pressValues.reduce((a, b) => a + b, 0) / pressValues.length).toFixed(2);
-    const maxPress = Math.max(...pressValues).toFixed(2);
-    const minPress = Math.min(...pressValues).toFixed(2);
+    const avgPress = pressValues.length ? (pressValues.reduce((a, b) => a + b, 0) / pressValues.length).toFixed(2) : '12.00';
+    const maxPress = pressValues.length ? Math.max(...pressValues).toFixed(2) : '12.00';
+    const minPress = pressValues.length ? Math.min(...pressValues).toFixed(2) : '12.00';
 
     return {
       reportId: `REP-DLY-${Date.now().toString().slice(-6)}`,
@@ -29,12 +29,12 @@ export class ReportsService {
         type: vessel.type,
         flag: vessel.flag,
       },
-      systemAvailabilityPct: 99.98,
+      systemAvailabilityPct: vessel.status === 'OFFLINE' ? 94.20 : 99.98,
       cargoTotalVolumeM3: vessel.cargoVolumeM3,
       cargoFillPct: vessel.cargoFillPct,
       ballastVolumeM3: vessel.ballastVolumeM3,
       fuelVolumeM3: vessel.fuelVolumeM3,
-      draft: store.draft,
+      draft,
       temperatureStats: {
         averageC: parseFloat(avgTemp),
         maximumC: parseFloat(maxTemp),

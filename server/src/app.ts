@@ -1,4 +1,7 @@
 import http from 'http';
+import path from 'path';
+import fs from 'fs';
+import os from 'os';
 import express from 'express';
 import cors from 'cors';
 import { store } from './database/inMemoryStore.js';
@@ -12,11 +15,23 @@ import { telemetrySimulator } from './simulator/telemetrySimulator.js';
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+function getLocalIp(): string {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name] || []) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return 'localhost';
+}
+
 app.use(cors());
 app.use(express.json());
 
 // 1. Health check
-app.get('/api/health', (req, res) => {
+app.get('/api/health', (_req, res) => {
   res.json({
     status: 'HEALTHY',
     service: 'tanker-vessel-monitor-backend',
@@ -26,7 +41,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // 2. Fleet Overview
-app.get('/api/fleet/summary', (req, res) => {
+app.get('/api/fleet/summary', (_req, res) => {
   const online = store.vessels.filter((v) => v.status === 'ONLINE').length;
   const warning = store.vessels.filter((v) => v.status === 'WARNING').length;
   const critical = store.vessels.filter((v) => v.status === 'CRITICAL').length;
@@ -47,18 +62,19 @@ app.get('/api/fleet/summary', (req, res) => {
 
 // 3. Vessel Digital Twin & Tanks
 app.get('/api/vessels/:id', (req, res) => {
-  const vessel = store.vessels.find((v) => v.vesselId === req.params.id) || store.vessels[0];
+  const vessel = store.getVessel(req.params.id);
   res.json(vessel);
 });
 
 app.get('/api/vessels/:id/tanks', (req, res) => {
-  res.json(Object.values(store.tanks));
+  const tanks = store.getTanks(req.params.id);
+  res.json(Object.values(tanks));
 });
 
 // 4. Tank Telemetry & High-Frequency Analytics
 app.get('/api/vessels/:id/tanks/:tankId/analytics', (req, res) => {
   const range = (req.query.range as string) || '24H';
-  const analytics = analyticsService.getTankAnalytics(req.params.tankId, range);
+  const analytics = analyticsService.getTankAnalytics(req.params.tankId, range, req.params.id);
   if (!analytics) {
     res.status(404).json({ error: 'Tank not found' });
     return;
@@ -68,18 +84,21 @@ app.get('/api/vessels/:id/tanks/:tankId/analytics', (req, res) => {
 
 // 5. Draft & Hull Dynamics
 app.get('/api/vessels/:id/draft', (req, res) => {
-  res.json(store.draft);
+  const draft = store.getDraft(req.params.id);
+  res.json(draft);
 });
 
 // 6. Manifold Piping & Pressure
 app.get('/api/vessels/:id/manifolds', (req, res) => {
-  res.json(store.manifolds);
+  const manifolds = store.getManifolds(req.params.id);
+  res.json(manifolds);
 });
 
 // 7. Alarms & Rate-of-Change Engine
 app.get('/api/alarms', (req, res) => {
-  const alarms = alarmEngine.getAlarms(req.query.vesselId as string);
-  const stats = alarmEngine.getSummaryStats();
+  const vesselId = req.query.vesselId as string | undefined;
+  const alarms = alarmEngine.getAlarms(vesselId);
+  const stats = alarmEngine.getSummaryStats(vesselId);
   res.json({ alarms, stats });
 });
 
@@ -124,54 +143,96 @@ app.post('/api/alarms/:id/resolve', (req, res) => {
 // 8. Immutable Audit Trail
 app.get('/api/audit', (req, res) => {
   const limit = parseInt(req.query.limit as string) || 50;
-  const action = req.query.action as string;
+  const action = req.query.action as string | undefined;
   res.json(auditService.getEvents(limit, action));
+});
+
+app.post('/api/audit', (req, res) => {
+  const { userId, userName, userRole, action, vesselId, vesselName, targetEntity, oldValue, newValue, details } = req.body;
+  const recorded = auditService.record({
+    userId: userId || 'USR-OP01',
+    userName: userName || 'Operator',
+    userRole: userRole || 'VESSEL_OPERATOR',
+    action: action || 'USER_ROLE_SWITCH',
+    vesselId: vesselId || 'VESSEL-001',
+    vesselName: vesselName || 'MT Ocean Star',
+    targetEntity: targetEntity || 'System Console',
+    oldValue,
+    newValue,
+    ipAddress: req.ip || '127.0.0.1',
+    details: details || 'Operator action recorded.',
+  });
+  res.json(recorded);
 });
 
 // 9. Compliance Reports
 app.get('/api/reports/daily', (req, res) => {
-  const report = reportsService.generateDailyVesselReport(req.query.vesselId as string);
+  const vesselId = (req.query.vesselId as string) || 'VESSEL-001';
+  const report = reportsService.generateDailyVesselReport(vesselId);
   res.json(report);
 });
 
 app.get('/api/reports/daily/csv', (req, res) => {
-  const csv = reportsService.exportDailyReportCsv(req.query.vesselId as string);
+  const vesselId = (req.query.vesselId as string) || 'VESSEL-001';
+  const csv = reportsService.exportDailyReportCsv(vesselId);
   res.setHeader('Content-Type', 'text/csv');
-  res.setHeader('Content-Disposition', 'attachment; filename="vessel-daily-report.csv"');
+  res.setHeader('Content-Disposition', `attachment; filename="${vesselId.toLowerCase()}-daily-report.csv"`);
   res.send(csv);
 });
 
 // 10. Simulation Triggers
 app.post('/api/simulation/roc-spike', (req, res) => {
-  const { tankId = 'C05' } = req.body;
-  const result = telemetrySimulator.triggerRocSpike(tankId);
+  const { tankId = 'C05', vesselId = 'VESSEL-001' } = req.body;
+  const result = telemetrySimulator.triggerRocSpike(tankId, vesselId);
+  const vessel = store.getVessel(vesselId);
   auditService.record({
     userId: 'USR-SIM',
     userName: 'SCADA Sim Controller',
     userRole: 'CHIEF_ENGINEER',
     action: 'THRESHOLD_UPDATE',
-    vesselId: 'VESSEL-001',
-    vesselName: 'MT Ocean Star',
+    vesselId,
+    vesselName: vessel.name,
     targetEntity: `SIM: Pressure Surge on ${tankId}`,
     oldValue: 'Normal',
-    newValue: 'Rapid Surge (+4.0 mbar)',
+    newValue: 'Rapid Surge (+4.5 mbar)',
     ipAddress: '127.0.0.1',
-    details: 'Triggered synthetic ROC pressure spike to test operator alarm response.',
+    details: `Triggered synthetic ROC pressure surge on ${vessel.name} (${tankId}) to test operator alarm response.`,
   });
   res.json(result);
 });
 
-app.post('/api/simulation/reset', (req, res) => {
+app.post('/api/simulation/reset', (_req, res) => {
   const result = telemetrySimulator.resetSimulation();
   res.json(result);
 });
+
+// 11. Static Frontend Serving (enables direct single-port access over LAN)
+const clientDistPath = fs.existsSync(path.resolve(process.cwd(), 'client/dist'))
+  ? path.resolve(process.cwd(), 'client/dist')
+  : path.resolve(process.cwd(), '../client/dist');
+
+if (fs.existsSync(clientDistPath)) {
+  app.use(express.static(clientDistPath));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/ws')) {
+      return next();
+    }
+    res.sendFile(path.join(clientDistPath, 'index.html'));
+  });
+}
 
 // HTTP & WebSocket Server startup
 const server = http.createServer(app);
 wsGateway.init(server);
 
-server.listen(PORT, () => {
-  console.log(`[Marine Tanker Backend] HTTP & WebSocket Server running on port ${PORT}`);
+server.listen(Number(PORT), '0.0.0.0', () => {
+  const localIp = getLocalIp();
+  console.log(`\n===============================================================`);
+  console.log(`  🚢 Marine Tanker SCADA Platform — Telemetry Backend Active`);
+  console.log(`  ➜  Local:     http://localhost:${PORT}`);
+  console.log(`  ➜  Network:   http://${localIp}:${PORT}`);
+  console.log(`  ➜  WebSocket: ws://${localIp}:${PORT}/ws/telemetry`);
+  console.log(`===============================================================\n`);
   telemetrySimulator.start();
-  console.log(`[Marine Tanker Simulator] Telemetry emitter active (1s scan cycle)`);
+  console.log(`[Marine Tanker Simulator] Multi-vessel telemetry emitter active (1s scan cycle)`);
 });

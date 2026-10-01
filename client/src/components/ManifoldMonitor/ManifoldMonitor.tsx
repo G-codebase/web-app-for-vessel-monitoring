@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
-import { useTelemetry, ManifoldData } from '../../context/TelemetryContext';
-import { GitMerge, Gauge, Thermometer, Droplets, CheckCircle, Sliders } from 'lucide-react';
+import { useTelemetry } from '../../context/TelemetryContext';
+import { CheckCircle } from 'lucide-react';
 
 export const ManifoldMonitor: React.FC = () => {
-  const { manifolds } = useTelemetry();
+  const { manifolds, currentVesselId, vessels } = useTelemetry();
   const [selectedPointId, setSelectedPointId] = useState<string>('P1');
+
+  const currentVessel = vessels.find((v) => v.vesselId === currentVesselId);
+  const vesselName = currentVessel ? currentVessel.name : 'Vessel';
 
   const cargoPoints = manifolds.filter((m) => m.lineType === 'CARGO_LINE');
   const vapourPoints = manifolds.filter((m) => m.lineType === 'VAPOUR_LINE');
@@ -14,7 +17,7 @@ export const ManifoldMonitor: React.FC = () => {
     <div className="content-container">
       <div style={{ marginBottom: '24px' }}>
         <h1 style={{ fontSize: '26px', fontWeight: 700, color: '#fff', marginBottom: '6px' }}>
-          Digital Manifold Piping Topology
+          {vesselName} — Digital Manifold Piping Topology
         </h1>
         <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
           Cargo discharge and vapor recovery line pressure dynamics, valve telemetry, and instantaneous flow monitoring.

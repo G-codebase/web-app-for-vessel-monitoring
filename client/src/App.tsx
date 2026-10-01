@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { TelemetryProvider } from './context/TelemetryContext';
+import { TelemetryProvider, useTelemetry } from './context/TelemetryContext';
 import { TopNavbar } from './components/Navigation/TopNavbar';
 import { Sidebar, NavView } from './components/Navigation/Sidebar';
 import { FleetOverview } from './components/FleetOverview/FleetOverview';
@@ -17,8 +17,10 @@ import './styles/components.css';
 const MainApplication: React.FC = () => {
   const [currentView, setCurrentView] = useState<NavView>('VESSEL_OPERATIONS');
   const [selectedWorkspaceTankId, setSelectedWorkspaceTankId] = useState<string>('C05');
+  const { setCurrentVesselId } = useTelemetry();
 
   const handleSelectVessel = (vesselId: string) => {
+    setCurrentVesselId(vesselId);
     setCurrentView('VESSEL_OPERATIONS');
   };
 

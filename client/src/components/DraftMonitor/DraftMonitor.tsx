@@ -1,9 +1,12 @@
 import React from 'react';
 import { useTelemetry } from '../../context/TelemetryContext';
-import { Anchor, Compass, Activity, ArrowUp, ArrowDown } from 'lucide-react';
+import { Anchor, Compass } from 'lucide-react';
 
 export const DraftMonitor: React.FC = () => {
-  const { draft } = useTelemetry();
+  const { draft, currentVesselId, vessels } = useTelemetry();
+
+  const currentVessel = vessels.find((v) => v.vesselId === currentVesselId);
+  const vesselName = currentVessel ? currentVessel.name : 'Vessel';
 
   const fore = draft ? draft.foreDraftM : 4.85;
   const aft = draft ? draft.aftDraftM : 4.90;
@@ -12,12 +15,13 @@ export const DraftMonitor: React.FC = () => {
   const mean = draft ? draft.meanDraftM : 4.875;
   const trim = draft ? draft.trimM : 0.05;
   const heel = draft ? draft.heelDeg : 0.1;
+  const displacement = draft ? draft.displacementTons : 68400;
 
   return (
     <div className="content-container">
       <div style={{ marginBottom: '24px' }}>
         <h1 style={{ fontSize: '26px', fontWeight: 700, color: '#fff', marginBottom: '6px' }}>
-          Vessel Draft &amp; Hull Dynamics
+          {vesselName} — Draft &amp; Hull Dynamics
         </h1>
         <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
           Real-time hydrostatics, forward/aft draft soundings, vessel trim by stern, and hull hogging/sagging calculation.
@@ -44,9 +48,9 @@ export const DraftMonitor: React.FC = () => {
           <div className="kpi-subtext">Port: {midPort.toFixed(2)}m | Stbd: {midStbd.toFixed(2)}m</div>
         </div>
 
-        <div className="kpi-card" style={{ borderLeft: '4px solid var(--accent-indigo)' }}>
+        <div className="kpi-card" style={{ borderLeft: '4px solid var(--accent-purple)' }}>
           <div className="kpi-title">
-            <Anchor size={16} color="var(--accent-indigo)" />
+            <Anchor size={16} color="var(--accent-purple)" />
             AFT DRAFT (STERN)
           </div>
           <div className="kpi-value">{aft.toFixed(2)} m</div>
@@ -72,10 +76,10 @@ export const DraftMonitor: React.FC = () => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
           <div>
             <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#fff' }}>
-              Hull Profile &amp; Waterline Dynamic Alignment
+              Hull Profile &amp; Waterline Dynamic Alignment: {vesselName}
             </h2>
             <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-              Mean Draft: {mean.toFixed(3)} m • Displacement: 68,400 MT • List Angle: {heel}° Starboard
+              Mean Draft: {mean.toFixed(3)} m • Displacement: {displacement.toLocaleString()} MT • List Angle: {heel}° Starboard
             </div>
           </div>
           <span className="badge badge-live">Hydrostatic Stability Good</span>

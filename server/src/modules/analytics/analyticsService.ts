@@ -34,11 +34,12 @@ export type CombinedTankAnalytics = {
 };
 
 export class AnalyticsService {
-  public getTankAnalytics(tankId: string, range: string = '24H'): CombinedTankAnalytics | null {
-    const tank = store.tanks[tankId] || store.tanks['C05'];
+  public getTankAnalytics(tankId: string, range: string = '24H', vesselId: string = 'VESSEL-001'): CombinedTankAnalytics | null {
+    const vesselTanks = store.getTanks(vesselId);
+    const tank = vesselTanks[tankId] || Object.values(vesselTanks)[0];
     if (!tank) return null;
 
-    const fullSeries = store.timeSeriesCache[tank.tankId] || [];
+    const fullSeries = store.getTimeSeries(vesselId, tank.tankId);
     let points = [...fullSeries];
 
     // Downsample or filter according to range
@@ -55,22 +56,24 @@ export class AnalyticsService {
     const temps = points.map((p) => p.temp);
     const pressures = points.map((p) => p.pressure);
 
-    const tempAvg = temps.reduce((a, b) => a + b, 0) / (temps.length || 1);
-    const tempMax = Math.max(...temps);
-    const tempMin = Math.min(...temps);
+    const tempAvg = temps.length ? temps.reduce((a, b) => a + b, 0) / temps.length : tank.temperatureC;
+    const tempMax = temps.length ? Math.max(...temps) : tank.temperatureC;
+    const tempMin = temps.length ? Math.min(...temps) : tank.temperatureC;
     const tempChange = temps.length > 1 ? temps[temps.length - 1] - temps[0] : 0;
     const tempTrend: 'Rising' | 'Falling' | 'Stable' =
       tempChange > 0.3 ? 'Rising' : tempChange < -0.3 ? 'Falling' : 'Stable';
 
-    const pressAvg = pressures.reduce((a, b) => a + b, 0) / (pressures.length || 1);
-    const pressMax = Math.max(...pressures);
-    const pressMin = Math.min(...pressures);
+    const pressAvg = pressures.length ? pressures.reduce((a, b) => a + b, 0) / pressures.length : tank.pressureMbar;
+    const pressMax = pressures.length ? Math.max(...pressures) : tank.pressureMbar;
+    const pressMin = pressures.length ? Math.min(...pressures) : tank.pressureMbar;
     const pressChange = pressures.length > 1 ? pressures[pressures.length - 1] - pressures[0] : 0;
     const pressTrend: 'Rising' | 'Falling' | 'Stable' =
       pressChange > 0.4 ? 'Rising' : pressChange < -0.4 ? 'Falling' : 'Stable';
 
     const firstVol = points.length > 0 ? points[0].volume : tank.volumeM3;
     const volumeChange24h = tank.volumeM3 - firstVol;
+
+    const tankAlarms = store.alarms.filter((a) => a.vesselId === vesselId && a.locationId === tank.tankId);
 
     return {
       tankId: tank.tankId,
@@ -84,7 +87,7 @@ export class AnalyticsService {
         change: parseFloat(tempChange.toFixed(2)),
         trend: tempTrend,
         rateOfChangePerHour: parseFloat((tempChange / 24).toFixed(2)),
-        thresholdEvents: store.alarms.filter((a) => a.locationId === tank.tankId && a.subsystem === 'CARGO' && a.unit === '°C').length,
+        thresholdEvents: tankAlarms.filter((a) => a.subsystem === 'CARGO' && a.unit === '°C').length,
         dataAvailabilityPct: 99.98,
         unit: '°C',
       },
@@ -97,7 +100,7 @@ export class AnalyticsService {
         change: parseFloat(pressChange.toFixed(2)),
         trend: pressTrend,
         rateOfChangePerHour: parseFloat((pressChange / 24).toFixed(2)),
-        thresholdEvents: store.alarms.filter((a) => a.locationId === tank.tankId && a.unit === 'mbar').length,
+        thresholdEvents: tankAlarms.filter((a) => a.unit === 'mbar').length,
         dataAvailabilityPct: 99.98,
         unit: 'mbar',
       },

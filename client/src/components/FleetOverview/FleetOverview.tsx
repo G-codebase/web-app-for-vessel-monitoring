@@ -1,16 +1,16 @@
 import React from 'react';
 import { useTelemetry } from '../../context/TelemetryContext';
-import { Ship, Radio, AlertCircle, ArrowRight, ShieldAlert, CheckCircle2 } from 'lucide-react';
+import { Ship, AlertCircle, ArrowRight, ShieldAlert, CheckCircle2 } from 'lucide-react';
 
 export const FleetOverview: React.FC<{ onSelectVessel: (vesselId: string) => void }> = ({
   onSelectVessel,
 }) => {
   const { vessels } = useTelemetry();
 
-  const totalVessels = 12;
-  const onlineCount = vessels.filter((v) => v.status === 'ONLINE').length + 8; // aggregate fleet projection
+  const totalVessels = vessels.length;
+  const onlineCount = vessels.filter((v) => v.status === 'ONLINE').length;
   const warningCount = vessels.filter((v) => v.status === 'WARNING').length;
-  const criticalCount = vessels.filter((v) => v.status === 'CRITICAL').length + 1;
+  const criticalCount = vessels.filter((v) => v.status === 'CRITICAL').length;
 
   return (
     <div className="content-container">
@@ -31,10 +31,10 @@ export const FleetOverview: React.FC<{ onSelectVessel: (vesselId: string) => voi
         <div className="kpi-card" style={{ borderLeft: '4px solid var(--accent-cyan)' }}>
           <div className="kpi-title">
             <Ship size={16} color="var(--accent-cyan)" />
-            Total Fleet Vessels
+            Total Monitored Fleet
           </div>
           <div className="kpi-value">{totalVessels}</div>
-          <div className="kpi-subtext">Commercial Tankers</div>
+          <div className="kpi-subtext">Commercial Tankers Active</div>
         </div>
 
         <div className="kpi-card" style={{ borderLeft: '4px solid var(--accent-emerald)' }}>
@@ -76,7 +76,7 @@ export const FleetOverview: React.FC<{ onSelectVessel: (vesselId: string) => voi
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <h2 style={{ fontSize: '18px', fontWeight: 600, color: '#fff' }}>Monitored Tanker Fleet</h2>
           <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-            Showing 4 high-priority vessels with continuous SCADA telemetry
+            Showing {vessels.length} commercial vessels with active SCADA telemetry gateways
           </span>
         </div>
 
@@ -98,7 +98,7 @@ export const FleetOverview: React.FC<{ onSelectVessel: (vesselId: string) => voi
               {vessels.map((vessel) => {
                 const isOnline = vessel.status === 'ONLINE';
                 const isWarning = vessel.status === 'WARNING';
-                const isOffline = vessel.status === 'OFFLINE';
+                const isCritical = vessel.status === 'CRITICAL';
 
                 return (
                   <tr key={vessel.vesselId} id={`vessel-row-${vessel.vesselId.toLowerCase()}`}>
@@ -126,14 +126,16 @@ export const FleetOverview: React.FC<{ onSelectVessel: (vesselId: string) => voi
                     <td>
                       <span
                         className={`badge ${
-                          isOnline
+                          isCritical
+                            ? 'badge-critical'
+                            : isOnline
                             ? 'badge-live'
                             : isWarning
                             ? 'badge-warning'
                             : 'badge-offline'
                         }`}
                       >
-                        <span className={`status-dot ${isOnline ? 'live' : isWarning ? 'warning' : 'offline'}`} />
+                        <span className={`status-dot ${isCritical ? 'critical' : isOnline ? 'live' : isWarning ? 'warning' : 'offline'}`} />
                         {vessel.status}
                       </span>
                     </td>

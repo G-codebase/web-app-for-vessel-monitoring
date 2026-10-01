@@ -4,17 +4,17 @@ import { useTelemetry } from '../../context/TelemetryContext';
 import {
   Thermometer,
   Gauge,
-  TrendingUp,
-  Clock,
   CheckCircle,
-  AlertTriangle,
   RefreshCw,
 } from 'lucide-react';
+import * as api from '../../services/api';
 
 export const TelemetryWorkspace: React.FC<{ initialTankId?: string }> = ({
   initialTankId = 'C05',
 }) => {
-  const { tanks } = useTelemetry();
+  const { tanks, currentVesselId, vessels } = useTelemetry();
+  const tankKeys = Object.keys(tanks);
+
   const [selectedTank, setSelectedTank] = useState(initialTankId);
   const [timeRange, setTimeRange] = useState('24H');
   const [analyticsData, setAnalyticsData] = useState<any>(null);
@@ -23,12 +23,15 @@ export const TelemetryWorkspace: React.FC<{ initialTankId?: string }> = ({
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<echarts.ECharts | null>(null);
 
-  const fetchAnalytics = async () => {
+  // Derive the active tank, ensuring it always exists for the current vessel
+  const activeTank = tanks[selectedTank] ? selectedTank : tankKeys[0] || 'C01';
+
+  // Manual refresh button handler
+  const handleManualRefresh = async () => {
+    if (!activeTank) return;
     setLoading(true);
     try {
-      const res = await fetch(
-        `http://localhost:3001/api/vessels/VESSEL-001/tanks/${selectedTank}/analytics?range=${timeRange}`
-      ).then((r) => r.json());
+      const res = await api.fetchTankAnalytics(currentVesselId, activeTank, timeRange);
       setAnalyticsData(res);
     } catch (err) {
       console.error('Analytics fetch error:', err);
@@ -37,9 +40,25 @@ export const TelemetryWorkspace: React.FC<{ initialTankId?: string }> = ({
     }
   };
 
+  // Asynchronous time-series fetching on tank, range, or vessel change
   useEffect(() => {
-    fetchAnalytics();
-  }, [selectedTank, timeRange]);
+    if (!activeTank) return;
+    let isCurrent = true;
+
+    api.fetchTankAnalytics(currentVesselId, activeTank, timeRange)
+      .then((res) => {
+        if (isCurrent) {
+          setAnalyticsData(res);
+        }
+      })
+      .catch((err) => {
+        console.error('Analytics fetch error:', err);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [currentVesselId, activeTank, timeRange]);
 
   // Render or update ECharts instance
   useEffect(() => {
@@ -55,6 +74,11 @@ export const TelemetryWorkspace: React.FC<{ initialTankId?: string }> = ({
     );
     const temps = seriesData.map((p: any) => p.temp);
     const pressures = seriesData.map((p: any) => p.pressure);
+
+    const minTemp = temps.length ? Math.min(...temps) : 20;
+    const maxTemp = temps.length ? Math.max(...temps) : 25;
+    const minPress = pressures.length ? Math.min(...pressures) : 10;
+    const maxPress = pressures.length ? Math.max(...pressures) : 16;
 
     const option: echarts.EChartsOption = {
       backgroundColor: 'transparent',
@@ -93,8 +117,8 @@ export const TelemetryWorkspace: React.FC<{ initialTankId?: string }> = ({
           type: 'value',
           name: 'Temp (°C)',
           position: 'left',
-          min: Math.floor(Math.min(...temps) - 1),
-          max: Math.ceil(Math.max(...temps) + 1),
+          min: Math.floor(minTemp - 1),
+          max: Math.ceil(maxTemp + 1),
           axisLine: { show: true, lineStyle: { color: '#00f0ff' } },
           axisLabel: { formatter: '{value} °C', color: '#00f0ff' },
           splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.05)' } },
@@ -103,8 +127,8 @@ export const TelemetryWorkspace: React.FC<{ initialTankId?: string }> = ({
           type: 'value',
           name: 'Pressure (mbar)',
           position: 'right',
-          min: Math.floor(Math.min(...pressures) - 1),
-          max: Math.ceil(Math.max(...pressures) + 1),
+          min: Math.floor(minPress - 1),
+          max: Math.ceil(maxPress + 1),
           axisLine: { show: true, lineStyle: { color: '#f59e0b' } },
           axisLabel: { formatter: '{value} mbar', color: '#f59e0b' },
           splitLine: { show: false },
@@ -147,6 +171,7 @@ export const TelemetryWorkspace: React.FC<{ initialTankId?: string }> = ({
   }, [analyticsData]);
 
   const ranges = ['1H', '6H', '12H', '24H', '7D', '30D', 'CUSTOM'];
+  const vesselName = vessels.find((v) => v.vesselId === currentVesselId)?.name || 'Vessel';
 
   return (
     <div className="content-container">
@@ -155,11 +180,11 @@ export const TelemetryWorkspace: React.FC<{ initialTankId?: string }> = ({
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <h1 style={{ fontSize: '24px', fontWeight: 700, color: '#fff' }}>
-              Telemetry Workspace
+              Telemetry Workspace: {vesselName}
             </h1>
             <select
               id="telemetry-tank-picker"
-              value={selectedTank}
+              value={activeTank}
               onChange={(e) => setSelectedTank(e.target.value)}
               style={{
                 background: 'var(--bg-card)',
@@ -173,7 +198,7 @@ export const TelemetryWorkspace: React.FC<{ initialTankId?: string }> = ({
                 cursor: 'pointer',
               }}
             >
-              {Object.keys(tanks).map((id) => (
+              {tankKeys.map((id) => (
                 <option key={id} value={id}>
                   {tanks[id].name}
                 </option>
@@ -188,7 +213,7 @@ export const TelemetryWorkspace: React.FC<{ initialTankId?: string }> = ({
         <button
           id="refresh-telemetry-btn"
           className="btn btn-ghost"
-          onClick={fetchAnalytics}
+          onClick={handleManualRefresh}
           disabled={loading}
         >
           <RefreshCw size={14} className={loading ? 'spinning' : ''} />
@@ -196,7 +221,7 @@ export const TelemetryWorkspace: React.FC<{ initialTankId?: string }> = ({
         </button>
       </div>
 
-      {/* Operational Intelligence Cards (Section 8 & 9) */}
+      {/* Operational Intelligence Cards */}
       {analyticsData && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
           {/* Temperature Intelligence */}

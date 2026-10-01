@@ -1,24 +1,37 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, Filter, Clock, User, ArrowRight } from 'lucide-react';
+import { Filter, ArrowRight, RefreshCw } from 'lucide-react';
+import * as api from '../../services/api';
 
 export const AuditTrail: React.FC = () => {
   const [audits, setAudits] = useState<any[]>([]);
   const [actionFilter, setActionFilter] = useState('ALL');
+  const [loading, setLoading] = useState(false);
 
-  const fetchAudits = async () => {
+  const handleManualRefresh = async () => {
+    setLoading(true);
     try {
-      const url = actionFilter === 'ALL'
-        ? 'http://localhost:3001/api/audit'
-        : `http://localhost:3001/api/audit?action=${actionFilter}`;
-      const res = await fetch(url).then((r) => r.json());
+      const res = await api.fetchAuditEvents(actionFilter);
       setAudits(res);
     } catch (err) {
       console.error('Audit fetch error:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchAudits();
+    let isCurrent = true;
+    api.fetchAuditEvents(actionFilter)
+      .then((res) => {
+        if (isCurrent) setAudits(res);
+      })
+      .catch((err) => {
+        console.error('Audit fetch error:', err);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
   }, [actionFilter]);
 
   return (
@@ -33,27 +46,41 @@ export const AuditTrail: React.FC = () => {
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Filter size={14} color="var(--text-muted)" />
-          <select
-            id="audit-filter-dropdown"
-            value={actionFilter}
-            onChange={(e) => setActionFilter(e.target.value)}
-            style={{
-              background: 'var(--bg-card)',
-              color: '#fff',
-              border: '1px solid var(--border-medium)',
-              borderRadius: 'var(--radius-sm)',
-              padding: '6px 12px',
-              fontSize: '12px',
-            }}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Filter size={14} color="var(--text-muted)" />
+            <select
+              id="audit-filter-dropdown"
+              value={actionFilter}
+              onChange={(e) => setActionFilter(e.target.value)}
+              style={{
+                background: 'var(--bg-card)',
+                color: '#fff',
+                border: '1px solid var(--border-medium)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '6px 12px',
+                fontSize: '12px',
+                cursor: 'pointer',
+              }}
+            >
+              <option value="ALL">All Recorded Actions</option>
+              <option value="ALARM_ACKNOWLEDGE">Alarm Acknowledgment</option>
+              <option value="ALARM_RESOLVE">Alarm Resolution</option>
+              <option value="THRESHOLD_UPDATE">Threshold Modification</option>
+              <option value="USER_ROLE_SWITCH">User Role Switching</option>
+              <option value="REPORT_GENERATION">Report Generation</option>
+            </select>
+          </div>
+
+          <button
+            id="refresh-audit-btn"
+            className="btn btn-ghost"
+            style={{ padding: '6px 10px' }}
+            onClick={handleManualRefresh}
+            disabled={loading}
           >
-            <option value="ALL">All Recorded Actions</option>
-            <option value="ALARM_ACKNOWLEDGE">Alarm Acknowledgment</option>
-            <option value="ALARM_RESOLVE">Alarm Resolution</option>
-            <option value="THRESHOLD_UPDATE">Threshold Modification</option>
-            <option value="REPORT_GENERATION">Report Generation</option>
-          </select>
+            <RefreshCw size={14} className={loading ? 'spinning' : ''} />
+          </button>
         </div>
       </div>
 
@@ -63,6 +90,7 @@ export const AuditTrail: React.FC = () => {
             <thead>
               <tr>
                 <th>Event ID &amp; Timestamp</th>
+                <th>Vessel Identity</th>
                 <th>Operator Identity</th>
                 <th>Role &amp; Rank</th>
                 <th>Operational Action</th>
@@ -82,6 +110,13 @@ export const AuditTrail: React.FC = () => {
                     <div className="mono" style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
                       {new Date(event.timestamp).toISOString().replace('T', ' ').slice(0, 19)} UTC
                     </div>
+                  </td>
+
+                  <td>
+                    <span style={{ fontWeight: 600, color: '#fff', fontSize: '12px' }}>
+                      {event.vesselName || event.vesselId}
+                    </span>
+                    <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{event.vesselId}</div>
                   </td>
 
                   <td>

@@ -5,17 +5,20 @@ import {
   ShieldAlert,
   Bell,
   CheckCircle2,
-  Clock,
   Check,
-  XCircle,
-  MessageSquare,
 } from 'lucide-react';
 
 export const AlarmCenter: React.FC = () => {
-  const { alarms, alarmStats, acknowledgeAlarm, resolveAlarm, currentUser } = useTelemetry();
+  const { alarms, alarmStats, acknowledgeAlarm, resolveAlarm, currentUser, vessels } = useTelemetry();
   const [selectedAlarm, setSelectedAlarm] = useState<AlarmItem | null>(null);
   const [actionType, setActionType] = useState<'ACKNOWLEDGE' | 'RESOLVE' | null>(null);
   const [operatorNotes, setOperatorNotes] = useState('');
+  const [vesselFilter, setVesselFilter] = useState<string>('ALL');
+
+  const filteredAlarms = alarms.filter((a) => {
+    if (vesselFilter === 'ALL') return true;
+    return a.vesselId === vesselFilter;
+  });
 
   const handleOpenActionModal = (alarm: AlarmItem, type: 'ACKNOWLEDGE' | 'RESOLVE') => {
     setSelectedAlarm(alarm);
@@ -42,13 +45,42 @@ export const AlarmCenter: React.FC = () => {
   return (
     <div className="content-container">
       {/* Alarm Center Header */}
-      <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '26px', fontWeight: 700, color: '#fff', marginBottom: '6px' }}>
-          Maritime Alarm &amp; Event Center
-        </h1>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
-          Static limits and dynamic Rate-of-Change (ROC) anomaly evaluation with audited lifecycle tracking.
-        </p>
+      <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <h1 style={{ fontSize: '26px', fontWeight: 700, color: '#fff', marginBottom: '6px' }}>
+            Maritime Alarm &amp; Event Center
+          </h1>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
+            Static limits and dynamic Rate-of-Change (ROC) anomaly evaluation with audited lifecycle tracking.
+          </p>
+        </div>
+
+        {/* Vessel Filter */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Filter Vessel:</span>
+          <select
+            id="alarm-vessel-filter"
+            value={vesselFilter}
+            onChange={(e) => setVesselFilter(e.target.value)}
+            style={{
+              background: 'var(--bg-card)',
+              color: '#fff',
+              border: '1px solid var(--border-medium)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '6px 12px',
+              fontSize: '12px',
+              outline: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            <option value="ALL">All Vessels ({alarms.length} alarms)</option>
+            {vessels.map((v) => (
+              <option key={v.vesselId} value={v.vesselId}>
+                {v.name} ({alarms.filter((a) => a.vesselId === v.vesselId).length})
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* KPI Stats Row */}
@@ -103,7 +135,7 @@ export const AlarmCenter: React.FC = () => {
             Active Alarms &amp; Security Events
           </h2>
           <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-            Auto-refreshing via SCADA WebSocket Gateway
+            Auto-refreshing via SCADA WebSocket Gateway • Showing {filteredAlarms.length} events
           </span>
         </div>
 
@@ -112,7 +144,7 @@ export const AlarmCenter: React.FC = () => {
             <thead>
               <tr>
                 <th>Severity</th>
-                <th>Alarm Title &amp; Details</th>
+                <th>Vessel &amp; Alarm Title</th>
                 <th>Location / Sensor</th>
                 <th>Rule Type</th>
                 <th>Measured Value</th>
@@ -122,10 +154,12 @@ export const AlarmCenter: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {alarms.map((alarm) => {
+              {filteredAlarms.map((alarm) => {
                 const isCritical = alarm.severity === 'CRITICAL';
                 const isAck = alarm.state === 'ACTIVE_ACKNOWLEDGED';
                 const isResolved = alarm.state === 'RESOLVED';
+                const vessel = vessels.find((v) => v.vesselId === alarm.vesselId);
+                const vesselLabel = vessel ? vessel.name : alarm.vesselId;
 
                 return (
                   <tr key={alarm.alarmId} id={`alarm-row-${alarm.alarmId.toLowerCase()}`}>
@@ -145,6 +179,9 @@ export const AlarmCenter: React.FC = () => {
                     </td>
 
                     <td>
+                      <div style={{ fontSize: '11px', color: 'var(--accent-cyan)', fontWeight: 600 }}>
+                        {vesselLabel}
+                      </div>
                       <div style={{ fontWeight: 600, color: '#fff' }}>{alarm.title}</div>
                       <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
                         {alarm.message}
@@ -272,6 +309,7 @@ export const AlarmCenter: React.FC = () => {
 
             <div style={{ background: 'rgba(0,0,0,0.3)', padding: '12px', borderRadius: 'var(--radius-sm)', marginBottom: '16px', fontSize: '12px' }}>
               <div><strong>Alarm:</strong> {selectedAlarm.title} ({selectedAlarm.alarmId})</div>
+              <div><strong>Vessel:</strong> {selectedAlarm.vesselId}</div>
               <div><strong>Operator:</strong> {currentUser.name} ({currentUser.rank})</div>
               <div><strong>Role:</strong> {currentUser.role}</div>
             </div>

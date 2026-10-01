@@ -1,8 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useTelemetry } from '../../context/TelemetryContext';
 import { TankDrawer } from './TankDrawer';
 import {
-  Ship,
   Layers,
   Thermometer,
   Gauge,
@@ -22,7 +21,6 @@ export const VesselSchematic: React.FC<{
     vessels,
     currentVesselId,
     latencySec,
-    connectionStatus,
     selectedTankId,
     setSelectedTankId,
   } = useTelemetry();
@@ -37,14 +35,17 @@ export const VesselSchematic: React.FC<{
       cargoFillPct: 72.4,
       ballastVolumeM3: 6420,
       fuelVolumeM3: 1080,
+      status: 'ONLINE',
     };
 
   const selectedTank = selectedTankId ? tanks[selectedTankId] || null : null;
 
-  const foreTanks = ['C01', 'C02', 'C03'];
-  const midTanks = ['C04', 'C05', 'C06'];
-  const aftTanks = ['C07', 'C08', 'C09'];
-  const slopTanks = ['SLOP-P', 'SLOP-S'];
+  // Group tanks dynamically by section for any vessel type
+  const tankIds = Object.keys(tanks);
+  const foreTanks = tankIds.filter((id) => tanks[id].section === 'FORE');
+  const midTanks = tankIds.filter((id) => tanks[id].section === 'MID');
+  const aftTanks = tankIds.filter((id) => tanks[id].section === 'AFT');
+  const slopTanks = tankIds.filter((id) => tanks[id].section === 'SLOP');
 
   const renderTankCard = (id: string) => {
     const tank = tanks[id];
@@ -145,6 +146,8 @@ export const VesselSchematic: React.FC<{
     );
   };
 
+  const firstTankId = tankIds[0] || 'C01';
+
   return (
     <div className="content-container">
       {/* Vessel Operations Center Header */}
@@ -161,8 +164,28 @@ export const VesselSchematic: React.FC<{
             <h1 style={{ fontSize: '26px', fontWeight: 800, color: '#fff' }}>
               {currentVessel.name.toUpperCase()}
             </h1>
-            <span className="badge badge-live">
-              <span className="status-dot live" />
+            <span
+              className={`badge ${
+                currentVessel.status === 'ONLINE'
+                  ? 'badge-live'
+                  : currentVessel.status === 'WARNING'
+                  ? 'badge-warning'
+                  : currentVessel.status === 'CRITICAL'
+                  ? 'badge-critical'
+                  : 'badge-offline'
+              }`}
+            >
+              <span
+                className={`status-dot ${
+                  currentVessel.status === 'ONLINE'
+                    ? 'live'
+                    : currentVessel.status === 'WARNING'
+                    ? 'warning'
+                    : currentVessel.status === 'CRITICAL'
+                    ? 'critical'
+                    : 'offline'
+                }`}
+              />
               {currentVessel.status || 'ONLINE'}
             </span>
           </div>
@@ -176,9 +199,11 @@ export const VesselSchematic: React.FC<{
               marginTop: '4px',
             }}
           >
+            <span>Class: {currentVessel.type}</span>
+            <span>•</span>
             <span>IMO {currentVessel.imo}</span>
             <span>•</span>
-            <span>Data latency: {latencySec}s</span>
+            <span>Latency: {latencySec}s</span>
             <span>•</span>
             <span>
               Last telemetry: {new Date().toISOString().slice(11, 19)} UTC
@@ -190,7 +215,7 @@ export const VesselSchematic: React.FC<{
           <button
             id="quick-telemetry-btn"
             className="btn btn-primary"
-            onClick={() => onOpenTelemetryWorkspace('C05')}
+            onClick={() => onOpenTelemetryWorkspace(selectedTankId || firstTankId)}
           >
             <Gauge size={15} />
             <span>Open Telemetry Workspace</span>
@@ -249,10 +274,10 @@ export const VesselSchematic: React.FC<{
       <div className="schematic-wrapper">
         <div style={{ textAlign: 'center', marginBottom: '16px' }}>
           <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#fff' }}>
-            Interactive Tanker Digital Twin Schematic
+            {currentVessel.name} Digital Twin Compartment Layout
           </h2>
           <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-            Select any cargo or slop tank to open instant telemetry diagnostics and 24h operational trends.
+            Select any cargo or slop compartment to open instant telemetry diagnostics and 24h operational trends.
           </p>
         </div>
 
@@ -264,28 +289,44 @@ export const VesselSchematic: React.FC<{
           </div>
 
           {/* Fore Tanks Section */}
-          <div className="section-label">FORE CARGO TANKS</div>
-          <div className="tanks-grid-3">
-            {foreTanks.map((id) => renderTankCard(id))}
-          </div>
+          {foreTanks.length > 0 && (
+            <>
+              <div className="section-label">FORE CARGO COMPARTMENTS</div>
+              <div className={foreTanks.length > 2 ? 'tanks-grid-3' : 'tanks-grid-2'}>
+                {foreTanks.map((id) => renderTankCard(id))}
+              </div>
+            </>
+          )}
 
           {/* Mid Tanks Section */}
-          <div className="section-label">MIDSHIP CARGO TANKS</div>
-          <div className="tanks-grid-3">
-            {midTanks.map((id) => renderTankCard(id))}
-          </div>
+          {midTanks.length > 0 && (
+            <>
+              <div className="section-label">MIDSHIP CARGO COMPARTMENTS</div>
+              <div className={midTanks.length > 2 ? 'tanks-grid-3' : 'tanks-grid-2'}>
+                {midTanks.map((id) => renderTankCard(id))}
+              </div>
+            </>
+          )}
 
           {/* Aft Tanks Section */}
-          <div className="section-label">AFT CARGO TANKS</div>
-          <div className="tanks-grid-3">
-            {aftTanks.map((id) => renderTankCard(id))}
-          </div>
+          {aftTanks.length > 0 && (
+            <>
+              <div className="section-label">AFT CARGO COMPARTMENTS</div>
+              <div className={aftTanks.length > 2 ? 'tanks-grid-3' : 'tanks-grid-2'}>
+                {aftTanks.map((id) => renderTankCard(id))}
+              </div>
+            </>
+          )}
 
           {/* Slop Tanks Section */}
-          <div className="section-label">SLOP TANKS (PORT &amp; STARBOARD)</div>
-          <div className="tanks-grid-2">
-            {slopTanks.map((id) => renderTankCard(id))}
-          </div>
+          {slopTanks.length > 0 && (
+            <>
+              <div className="section-label">SLOP TANKS (PORT &amp; STARBOARD)</div>
+              <div className="tanks-grid-2">
+                {slopTanks.map((id) => renderTankCard(id))}
+              </div>
+            </>
+          )}
 
           {/* Stern Marker */}
           <div className="stern-marker">

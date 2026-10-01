@@ -8,11 +8,11 @@ import {
   Ship,
   Radio,
   Clock,
-  UserCheck,
   Zap,
   AlertTriangle,
   RotateCcw,
 } from 'lucide-react';
+import * as api from '../../services/api';
 
 export const TopNavbar: React.FC = () => {
   const {
@@ -23,7 +23,6 @@ export const TopNavbar: React.FC = () => {
     setCurrentVesselId,
     currentUser,
     setCurrentUser,
-    alarmStats,
     triggerRocSpike,
     resetSimulation,
   } = useTelemetry();
@@ -43,6 +42,32 @@ export const TopNavbar: React.FC = () => {
     const interval = setInterval(updateTime, 1000);
     return () => clearInterval(interval);
   }, []);
+
+  const handleSwitchUser = async (user: UserProfile) => {
+    const prevUser = currentUser;
+    setCurrentUser(user);
+    setRoleMenuOpen(false);
+
+    try {
+      const activeVessel = vessels.find((v) => v.vesselId === currentVesselId);
+      await api.recordAuditEvent({
+        userId: user.userId,
+        userName: user.name,
+        userRole: user.role,
+        action: 'USER_ROLE_SWITCH',
+        vesselId: currentVesselId,
+        vesselName: activeVessel ? activeVessel.name : 'Commercial Tanker',
+        targetEntity: 'SCADA Workstation Session',
+        oldValue: `${prevUser.name} (${prevUser.role})`,
+        newValue: `${user.name} (${user.role})`,
+        details: `Operator identity switched on console workstation.`,
+      });
+    } catch (err) {
+      console.error('Audit logging role switch failed:', err);
+    }
+  };
+
+  const activeVesselName = vessels.find((v) => v.vesselId === currentVesselId)?.name || 'Vessel';
 
   return (
     <header className="top-navbar">
@@ -134,7 +159,7 @@ export const TopNavbar: React.FC = () => {
                 top: '100%',
                 right: 0,
                 marginTop: '8px',
-                width: '260px',
+                width: '280px',
                 background: 'var(--bg-surface)',
                 border: '1px solid var(--border-medium)',
                 borderRadius: 'var(--radius-md)',
@@ -144,7 +169,7 @@ export const TopNavbar: React.FC = () => {
               }}
             >
               <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px', fontWeight: 600 }}>
-                SCADA EVENT INJECTION
+                SCADA EVENT INJECTION: {activeVesselName.toUpperCase()}
               </div>
               <button
                 id="trigger-roc-surge-btn"
@@ -156,7 +181,7 @@ export const TopNavbar: React.FC = () => {
                 }}
               >
                 <AlertTriangle size={14} />
-                Surge C05 Pressure (+4 mbar ROC)
+                Surge C05 Pressure (+4.5 mbar ROC)
               </button>
               <button
                 id="reset-sim-btn"
@@ -246,10 +271,7 @@ export const TopNavbar: React.FC = () => {
                     flexDirection: 'column',
                     marginBottom: '4px',
                   }}
-                  onClick={() => {
-                    setCurrentUser(user);
-                    setRoleMenuOpen(false);
-                  }}
+                  onClick={() => handleSwitchUser(user)}
                 >
                   <span style={{ fontSize: '12px', fontWeight: 600 }}>{user.name}</span>
                   <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>

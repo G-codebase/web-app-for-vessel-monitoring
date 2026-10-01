@@ -1,16 +1,18 @@
 import React from 'react';
 import { useTelemetry } from '../../context/TelemetryContext';
-import { BarChart3, TrendingUp, ShieldCheck, Activity, Cpu, CheckCircle } from 'lucide-react';
+import { TrendingUp, Activity, Cpu, CheckCircle } from 'lucide-react';
 
 export const OperationalAnalytics: React.FC = () => {
-  const { tanks } = useTelemetry();
+  const { tanks, currentVesselId, vessels, latencySec } = useTelemetry();
   const tankList = Object.values(tanks);
+  const currentVessel = vessels.find((v) => v.vesselId === currentVesselId);
+  const vesselName = currentVessel ? currentVessel.name : 'Vessel';
 
   return (
     <div className="content-container">
       <div style={{ marginBottom: '24px' }}>
         <h1 style={{ fontSize: '26px', fontWeight: 700, color: '#fff', marginBottom: '6px' }}>
-          Operational Intelligence &amp; Analytics
+          {vesselName} — Operational Intelligence &amp; Analytics
         </h1>
         <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
           Predictive trend analysis, sensor quality health flags, cargo thermal expansion rates, and operational variance.
@@ -24,7 +26,9 @@ export const OperationalAnalytics: React.FC = () => {
             <Activity size={16} color="var(--accent-cyan)" />
             SYSTEM AVAILABILITY INDEX
           </div>
-          <div className="kpi-value" style={{ color: 'var(--accent-cyan)' }}>99.98%</div>
+          <div className="kpi-value" style={{ color: 'var(--accent-cyan)' }}>
+            {currentVessel?.status === 'OFFLINE' ? '94.20%' : '99.98%'}
+          </div>
           <div className="kpi-subtext">Zero dropped telemetry packets</div>
         </div>
 
@@ -33,7 +37,9 @@ export const OperationalAnalytics: React.FC = () => {
             <CheckCircle size={16} color="var(--accent-emerald)" />
             SENSOR CALIBRATION HEALTH
           </div>
-          <div className="kpi-value" style={{ color: 'var(--accent-emerald)' }}>48 / 48</div>
+          <div className="kpi-value" style={{ color: 'var(--accent-emerald)' }}>
+            {tankList.length * 4} / {tankList.length * 4}
+          </div>
           <div className="kpi-subtext">100% sensors reporting QUALITY: GOOD</div>
         </div>
 
@@ -51,7 +57,7 @@ export const OperationalAnalytics: React.FC = () => {
             <Cpu size={16} color="var(--accent-purple)" />
             SCADA GATEWAY LATENCY
           </div>
-          <div className="kpi-value">420 ms</div>
+          <div className="kpi-value">{(latencySec * 1000).toFixed(0)} ms</div>
           <div className="kpi-subtext">MQTT over Inmarsat-C satellite link</div>
         </div>
       </div>
@@ -59,7 +65,7 @@ export const OperationalAnalytics: React.FC = () => {
       {/* Tank Compartment Analytics Table */}
       <div className="glass-panel" style={{ marginTop: '20px' }}>
         <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#fff', marginBottom: '16px' }}>
-          Tank Compartment Intelligence Breakdown
+          {vesselName} Compartment Intelligence Breakdown
         </h2>
 
         <div className="data-table-container">
