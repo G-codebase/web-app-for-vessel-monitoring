@@ -1,0 +1,152 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  DISABLED
+}
+
+enum VesselStatus {
+  ACTIVE
+  INACTIVE
+  MAINTENANCE
+}
+
+enum VesselAccessLevel {
+  VIEW
+  OPERATE
+  MANAGE
+}
+
+model User {
+  id           String     @id @default(uuid())
+  email        String     @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  status       UserStatus @default(INVITED)
+
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  roles        UserRole[]
+  vesselAccess VesselAccess[]
+  auditLogs    AuditLog[]
+
+  @@index([email])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Role {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  description String?
+
+  users       UserRole[]
+  permissions RolePermission[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+}
+
+model Permission {
+  id          String  @id @default(uuid())
+  code        String  @unique
+  description String?
+
+  roles RolePermission[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([code])
+}
+
+model UserRole {
+  userId String
+  roleId String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  assignedAt DateTime @default(now())
+
+  @@id([userId, roleId])
+  @@index([roleId])
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  assignedAt DateTime @default(now())
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+}
+
+model Vessel {
+  id        String       @id @default(uuid())
+  name      String
+  imoNumber String?      @unique
+  status    VesselStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users VesselAccess[]
+
+  @@index([name])
+  @@index([status])
+}
+
+model VesselAccess {
+  userId   String
+  vesselId String
+  level    VesselAccessLevel @default(VIEW)
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vessel Vessel @relation(fields: [vesselId], references: [id], onDelete: Cascade)
+
+  grantedAt DateTime @default(now())
+
+  @@id([userId, vesselId])
+  @@index([vesselId])
+  @@index([level])
+}
+
+model AuditLog {
+  id     String  @id @default(uuid())
+  userId String?
+
+  action   String
+  resource String?
+  metadata Json?
+
+  ipAddress String?
+  userAgent String?
+  requestId String?
+
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([resource])
+  @@index([createdAt])
+  @@index([requestId])
+}
