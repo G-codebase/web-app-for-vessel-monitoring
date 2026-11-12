@@ -9,6 +9,10 @@ export class WebSocketGateway {
   public init(server: any) {
     this.wss = new WebSocketServer({ server, path: '/ws/telemetry' });
 
+    this.wss.on('error', (err: any) => {
+      console.warn('⚠️ [WebSocket Gateway Error]:', err?.message || err);
+    });
+
     this.wss.on('connection', (ws: WebSocket) => {
       this.clients.add(ws);
 

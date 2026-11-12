@@ -1,20 +1,45 @@
 export type UserRole =
+  | 'SUPER_ADMIN'
+  | 'ADMIN'
+  | 'TESTER_ADMIN'
+  | 'OPERATOR'
+  | 'VIEWER'
   | 'FLEET_MANAGER'
   | 'VESSEL_OPERATOR'
   | 'CHIEF_ENGINEER'
   | 'AUDITOR';
 
 export type UserProfile = {
+  id?: string;
   userId: string;
+  username?: string;
   name: string;
-  role: UserRole;
-  rank: string;
+  role: string;
+  roles?: string[];
+  permissions?: string[];
+  rank?: string;
   email: string;
+  assignedVessels?: { vesselId: string; name: string; level: string }[];
+  isSuperOrAdmin?: boolean;
 };
 
 export const AVAILABLE_USERS: UserProfile[] = [
-  { userId: 'USR-8821', name: 'John Mate', role: 'VESSEL_OPERATOR', rank: 'Chief Officer', email: 'john.mate@oceanstar.marine' },
-  { userId: 'USR-9004', name: 'Sarah Fleet', role: 'FLEET_MANAGER', rank: 'Fleet Superintendent', email: 'sarah.fleet@sjv-shipping.com' },
-  { userId: 'USR-7732', name: 'Vikram Singh', role: 'CHIEF_ENGINEER', rank: 'Chief Engineer', email: 'v.singh@oceanstar.marine' },
-  { userId: 'USR-5510', name: 'Elena Rostova', role: 'AUDITOR', rank: 'Class Surveyor / Vetting', email: 'elena.rostova@dnv.com' },
+  {
+    userId: 'USR-TESTER',
+    name: 'Tester Administrator',
+    role: 'TESTER_ADMIN',
+    roles: ['TESTER_ADMIN'],
+    permissions: ['*'],
+    rank: 'Platform Security Lead',
+    email: 'tester.admin@sjvmarine.com',
+    isSuperOrAdmin: true,
+  },
+  {
+    userId: 'USR-OP01',
+    name: 'Deck Operator',
+    role: 'OPERATOR',
+    roles: ['OPERATOR'],
+    rank: 'Chief Officer',
+    email: 'operator@sjvmarine.com',
+  },
 ];

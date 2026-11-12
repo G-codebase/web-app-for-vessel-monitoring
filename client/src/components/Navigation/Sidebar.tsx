@@ -2,43 +2,55 @@ import React from 'react';
 import {
   LayoutDashboard,
   Ship,
-  Activity,
+  Thermometer,
+  Gauge,
   Bell,
   Anchor,
-  GitMerge,
-  BarChart3,
+  Layers,
+  Cloud,
+  FileSpreadsheet,
+  Users,
   ShieldCheck,
-  FileText,
+  Droplet,
 } from 'lucide-react';
 import { useTelemetry } from '../../context/TelemetryContext';
 
 export type NavView =
   | 'FLEET'
   | 'VESSEL_OPERATIONS'
-  | 'TELEMETRY'
+  | 'CARGO_TANKS'
+  | 'BALLAST_TANKS'
+  | 'TEMPERATURE'
+  | 'PRESSURE'
   | 'ALARMS'
-  | 'DRAFT'
-  | 'MANIFOLD'
-  | 'ANALYTICS'
-  | 'AUDIT'
-  | 'REPORTS';
+  | 'CLOUD_SESSIONS'
+  | 'HISTORY_EXPORT'
+  | 'USERS'
+  | 'AUDIT';
 
 export const Sidebar: React.FC<{
   currentView: NavView;
   setCurrentView: (view: NavView) => void;
 }> = ({ currentView, setCurrentView }) => {
-  const { alarmStats } = useTelemetry();
+  const { alarmStats, currentUser } = useTelemetry();
+
+  const isSuperOrAdmin =
+    currentUser.isSuperOrAdmin ||
+    currentUser.roles?.some((r) => ['SUPER_ADMIN', 'ADMIN', 'TESTER_ADMIN'].includes(r)) ||
+    ['SUPER_ADMIN', 'ADMIN', 'TESTER_ADMIN'].includes(currentUser.role);
 
   const navItems = [
     { id: 'FLEET', label: 'Fleet Overview', icon: LayoutDashboard },
-    { id: 'VESSEL_OPERATIONS', label: 'Vessel Operations', icon: Ship },
-    { id: 'TELEMETRY', label: 'Telemetry Workspace', icon: Activity },
+    { id: 'VESSEL_OPERATIONS', label: 'System Overview', icon: Ship },
+    { id: 'CARGO_TANKS', label: 'Cargo Tanks', icon: Layers },
+    { id: 'BALLAST_TANKS', label: 'Ballast Tanks', icon: Droplet },
+    { id: 'TEMPERATURE', label: 'Temperature', icon: Thermometer },
+    { id: 'PRESSURE', label: 'Pressure & Manifold', icon: Gauge },
     { id: 'ALARMS', label: 'Alarm Center', icon: Bell, badge: alarmStats.activeCount },
-    { id: 'DRAFT', label: 'Draft & Hull Dynamics', icon: Anchor },
-    { id: 'MANIFOLD', label: 'Manifold Topology', icon: GitMerge },
-    { id: 'ANALYTICS', label: 'Operational Analytics', icon: BarChart3 },
+    { id: 'CLOUD_SESSIONS', label: 'Cloud & Sessions', icon: Cloud },
+    { id: 'HISTORY_EXPORT', label: 'History & CSV Export', icon: FileSpreadsheet },
+    ...(isSuperOrAdmin ? [{ id: 'USERS', label: 'User Directory', icon: Users }] : []),
     { id: 'AUDIT', label: 'Audit Trail', icon: ShieldCheck },
-    { id: 'REPORTS', label: 'Reports & Exports', icon: FileText },
   ];
 
   return (
@@ -46,11 +58,11 @@ export const Sidebar: React.FC<{
       {/* Brand Header */}
       <div className="brand-container">
         <div className="brand-icon">
-          <Anchor size={20} />
+          <Anchor size={20} className="text-cyan" />
         </div>
         <div>
           <div className="brand-title">SJV MARINE</div>
-          <div className="brand-subtitle">Tanker Monitor</div>
+          <div className="brand-subtitle">Tanker SCADA Cloud</div>
         </div>
       </div>
 
@@ -78,20 +90,9 @@ export const Sidebar: React.FC<{
       </ul>
 
       {/* Footer Info */}
-      <div
-        style={{
-          marginTop: 'auto',
-          padding: '16px',
-          borderTop: '1px solid var(--border-subtle)',
-          fontSize: '11px',
-          color: 'var(--text-muted)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '4px',
-        }}
-      >
-        <div style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>SCADA Protocol v1.0</div>
-        <div>Continuous Telemetry Broker</div>
+      <div className="sidebar-footer-box">
+        <div className="text-xs font-semibold text-white">Post-Production Build</div>
+        <div className="text-2xs text-muted">PostgreSQL • Prisma 7.10</div>
       </div>
     </aside>
   );

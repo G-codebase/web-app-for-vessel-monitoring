@@ -1,3 +1,14 @@
+
+export type VpsDateRecord = {
+  date: string;
+  fileName: string;
+  sizeBytes: number;
+  recordCount: number;
+  operationalContext: string;
+  status: "SYNCHRONIZED" | "ARCHIVED";
+  lastModified: string;
+  storageCluster: string;
+};
 import { UserProfile } from '../types/user';
 
 export type TankData = {
@@ -75,11 +86,26 @@ export type AlarmItem = {
 };
 
 export type TelemetryContextType = {
+  // Authentication & Security
+  isAuthenticated: boolean;
+  authLoading: boolean;
+  login: (email: string, pass: string) => Promise<void>;
+  logout: () => Promise<void>;
+  currentUser: UserProfile;
+  setCurrentUser: (user: UserProfile) => void;
+
+  // Cloud & Gateway Health
   connectionStatus: 'LIVE' | 'CONNECTING' | 'OFFLINE';
+  cloudStatus: 'CONNECTED' | 'DISCONNECTED' | 'RECONNECTING' | 'ERROR';
   latencySec: number;
+  lastDataTimestamp: string;
+
+  // Vessels
   vessels: any[];
   currentVesselId: string;
   setCurrentVesselId: (id: string) => void;
+
+  // Telemetry Models
   tanks: Record<string, TankData>;
   draft: DraftData | null;
   manifolds: ManifoldData[];
@@ -90,13 +116,30 @@ export type TelemetryContextType = {
     activeCount: number;
     acknowledgedCount: number;
   };
-  currentUser: UserProfile;
-  setCurrentUser: (user: UserProfile) => void;
   selectedTankId: string | null;
   setSelectedTankId: (id: string | null) => void;
+
+  // Operations
   acknowledgeAlarm: (alarmId: string, notes?: string) => Promise<void>;
   resolveAlarm: (alarmId: string, notes?: string) => Promise<void>;
   triggerRocSpike: (tankId?: string) => Promise<void>;
   resetSimulation: () => Promise<void>;
   refreshAlarms: () => Promise<void>;
+  refreshAll: () => Promise<void>;
+  testCloudHandshake: () => Promise<any>;
+  connectCloud: (vesselId?: string) => Promise<any>;
+  disconnectCloud: (vesselId?: string) => Promise<void>;
+
+  // VPS Storage & Date-Allocated Telemetry
+  selectedDate: string;
+  setSelectedDate: (date: string) => Promise<void>;
+  vpsStorageDates: VpsDateRecord[];
+  vpsActiveFile: string;
+  vpsOperationalContext: string;
+  isLoadingDateTelemetry: boolean;
+  loadVpsStorageDates: (vesselId?: string) => Promise<void>;
+  isDataInitiated: boolean;
+  initiateDataRender: (vesselId?: string, date?: string) => Promise<void>;
+  resetToNotInitiated: () => void;
 };
+

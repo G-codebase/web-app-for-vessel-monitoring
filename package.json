@@ -3,12 +3,14 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev:server": "npm --prefix server run dev",
+    "dev:server": "npm --prefix serverr run dev",
     "dev:client": "npm --prefix client run dev",
     "dev": "concurrently -n \"SERVER,CLIENT\" -c \"blue,cyan\" \"npm run dev:server\" \"npm run dev:client\"",
-    "build": "npm --prefix client run build && npm --prefix server run build",
-    "start": "npm --prefix server run start",
-    "serve": "npm run build && npm run start"
+    "build": "npm --prefix client run build && npm --prefix serverr run build",
+    "start": "npm --prefix serverr run start",
+    "serve": "npm run build && npm run start",
+    "clean:ports": "lsof -ti :3001,5173 | xargs kill -9 2>/dev/null || true",
+    "predev": "npm run clean:ports"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

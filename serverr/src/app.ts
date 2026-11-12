@@ -4,6 +4,7 @@ import fs from 'fs';
 import os from 'os';
 import express from 'express';
 import cors from 'cors';
+import { env } from './env.js';
 import { store } from './database/inMemoryStore.js';
 import { alarmEngine } from './modules/alarms/alarmEngine.js';
 import { analyticsService } from './modules/analytics/analyticsService.js';
@@ -11,9 +12,12 @@ import { auditService } from './modules/audit/auditService.js';
 import { reportsService } from './modules/reports/reportsService.js';
 import { wsGateway } from './websocket/gateway.js';
 import { telemetrySimulator } from './simulator/telemetrySimulator.js';
+import { apiRouter } from './routes/index.js';
+import { errorHandler, notFoundHandler } from './middleware/error.middleware.js';
+import { requestIdMiddleware } from './middleware/request-id.middleware.js';
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = env.PORT;
 
 function getLocalIp(): string {
   const interfaces = os.networkInterfaces();
@@ -27,8 +31,13 @@ function getLocalIp(): string {
   return 'localhost';
 }
 
-app.use(cors());
+app.use(cors({
+  origin: env.CLIENT_ORIGIN ?? true,
+  credentials: true,
+}));
 app.use(express.json());
+app.use(requestIdMiddleware);
+app.use('/api/v1', apiRouter);
 
 // 1. Health check
 app.get('/api/health', (_req, res) => {
@@ -221,9 +230,22 @@ if (fs.existsSync(clientDistPath)) {
   });
 }
 
+app.use(notFoundHandler);
+app.use(errorHandler);
+
 // HTTP & WebSocket Server startup
 const server = http.createServer(app);
 wsGateway.init(server);
+
+server.on('error', (err: any) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n⚠️ [PORT CONFLICT] Port ${PORT} is already in use by another instance or process.`);
+    console.error(`👉 To free port ${PORT}, run: lsof -ti :${PORT} | xargs kill -9\n`);
+    process.exit(1);
+  } else {
+    console.error('Server network error:', err);
+  }
+});
 
 server.listen(Number(PORT), '0.0.0.0', () => {
   const localIp = getLocalIp();
@@ -236,3 +258,15 @@ server.listen(Number(PORT), '0.0.0.0', () => {
   telemetrySimulator.start();
   console.log(`[Marine Tanker Simulator] Multi-vessel telemetry emitter active (1s scan cycle)`);
 });
+
+// Graceful process cleanup to avoid orphan port listeners
+const gracefulShutdown = () => {
+  telemetrySimulator.stop();
+  server.close(() => {
+    process.exit(0);
+  });
+  setTimeout(() => process.exit(0), 1000);
+};
+
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);

@@ -24,9 +24,46 @@ enum VesselAccessLevel {
   MANAGE
 }
 
+enum CloudConnectionStatus {
+  NOT_CONFIGURED
+  CONFIGURED
+  CONNECTING
+  CONNECTED
+  DISCONNECTED
+  RECONNECTING
+  ERROR
+}
+
+enum TelemetryQuality {
+  GOOD
+  SUSPECT
+  BAD
+  UNKNOWN
+}
+
+enum AlarmSeverity {
+  CRITICAL
+  WARNING
+  INFO
+}
+
+enum AlarmLifecycle {
+  NEW
+  ACTIVE
+  ACKNOWLEDGED
+  CLEARED
+}
+
+enum TankType {
+  CARGO
+  BALLAST
+  FUEL
+}
+
 model User {
   id           String     @id @default(uuid())
   email        String     @unique
+  username     String?    @unique
   passwordHash String
   firstName    String
   lastName     String
@@ -36,11 +73,14 @@ model User {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  roles        UserRole[]
-  vesselAccess VesselAccess[]
-  auditLogs    AuditLog[]
+  roles              UserRole[]
+  vesselAccess       VesselAccess[]
+  auditLogs          AuditLog[]
+  sessions           AuthSession[]
+  monitoringSessions MonitoringSession[]
 
   @@index([email])
+  @@index([username])
   @@index([status])
   @@index([createdAt])
 }
@@ -107,7 +147,13 @@ model Vessel {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users VesselAccess[]
+  users              VesselAccess[]
+  cloudConnection    CloudConnection?
+  monitoringSessions MonitoringSession[]
+  telemetryReadings  TelemetryReading[]
+  alarms             AlarmRecord[]
+  tanks              TankConfig[]
+  draftRecords       VesselDraftRecord[]
 
   @@index([name])
   @@index([status])
@@ -126,6 +172,149 @@ model VesselAccess {
   @@id([userId, vesselId])
   @@index([vesselId])
   @@index([level])
+}
+
+model AuthSession {
+  id         String    @id @default(uuid())
+  userId     String
+  token      String    @unique
+  userAgent  String?
+  ipAddress  String?
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@index([expiresAt])
+}
+
+model CloudConnection {
+  id              String                @id @default(uuid())
+  vesselId        String                @unique
+  providerName    String                @default("VesselCloud SCADA Gateway")
+  endpointUrl     String?
+  apiKeyMasked    String?
+  status          CloudConnectionStatus @default(CONNECTED)
+  pollIntervalSec Int                   @default(5)
+  lastSyncAt      DateTime?
+  lastReadingAt   DateTime?
+  lastError       String?
+  retryCount      Int                   @default(0)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  vessel          Vessel                @relation(fields: [vesselId], references: [id], onDelete: Cascade)
+  sessions        MonitoringSession[]
+}
+
+model MonitoringSession {
+  id                String           @id @default(uuid())
+  vesselId          String
+  userId            String
+  cloudConnectionId String?
+  label             String?
+  startedAt         DateTime         @default(now())
+  endedAt           DateTime?
+  readingsIngested  Int              @default(0)
+  alarmsTriggered   Int              @default(0)
+  cloudEndpoint     String?
+  notes             String?
+
+  vessel            Vessel           @relation(fields: [vesselId], references: [id], onDelete: Cascade)
+  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cloudConnection   CloudConnection? @relation(fields: [cloudConnectionId], references: [id], onDelete: SetNull)
+
+  @@index([vesselId])
+  @@index([userId])
+  @@index([startedAt])
+}
+
+model TelemetryReading {
+  id                  String           @id @default(uuid())
+  vesselId            String
+  deviceId            String
+  tag                 String
+  value               Float
+  unit                String?
+  sourceState         String?
+  sourceLimit         Float?
+  differenceFromLimit Float?
+  sourceMessage       String?
+  eventTimestamp      DateTime
+  receivedAt          DateTime         @default(now())
+  quality             TelemetryQuality @default(GOOD)
+
+  vessel              Vessel           @relation(fields: [vesselId], references: [id], onDelete: Cascade)
+
+  @@index([vesselId, eventTimestamp])
+  @@index([deviceId, eventTimestamp])
+  @@index([tag, eventTimestamp])
+}
+
+model AlarmRecord {
+  id                 String         @id @default(uuid())
+  vesselId           String
+  deviceId           String
+  tag                String
+  severity           AlarmSeverity  @default(WARNING)
+  lifecycle          AlarmLifecycle @default(ACTIVE)
+  value              Float
+  sourceLimit        Float?
+  message            String
+  firstOccurredAt    DateTime       @default(now())
+  lastOccurredAt     DateTime       @default(now())
+  acknowledgedAt     DateTime?
+  acknowledgedById   String?
+  acknowledgedByName String?
+  acknowledgedNotes  String?
+  clearedAt          DateTime?
+
+  vessel             Vessel         @relation(fields: [vesselId], references: [id], onDelete: Cascade)
+
+  @@index([vesselId, lifecycle])
+  @@index([firstOccurredAt])
+}
+
+model TankConfig {
+  id            String   @id @default(uuid())
+  vesselId      String
+  tankCode      String
+  name          String
+  type          TankType @default(CARGO)
+  capacityM3    Float
+  maxLevelM     Float
+  currentLevelM Float    @default(0)
+  temperatureC  Float    @default(20)
+  pressureMbar  Float    @default(0)
+  status        String   @default("NORMAL")
+  updatedAt     DateTime @updatedAt
+
+  vessel        Vessel   @relation(fields: [vesselId], references: [id], onDelete: Cascade)
+
+  @@unique([vesselId, tankCode])
+  @@index([vesselId])
+}
+
+model VesselDraftRecord {
+  id               String   @id @default(uuid())
+  vesselId         String
+  foreDraftM       Float
+  midPortDraftM    Float
+  midStbdDraftM    Float
+  aftDraftM        Float
+  meanDraftM       Float
+  trimM            Float
+  heelDeg          Float
+  displacementTons Float
+  recordedAt       DateTime @default(now())
+
+  vessel           Vessel   @relation(fields: [vesselId], references: [id], onDelete: Cascade)
+
+  @@index([vesselId, recordedAt])
 }
 
 model AuditLog {

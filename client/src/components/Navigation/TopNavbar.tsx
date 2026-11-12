@@ -1,287 +1,238 @@
-import React, { useState, useEffect } from 'react';
-import {
-  useTelemetry,
-  AVAILABLE_USERS,
-  UserProfile,
-} from '../../context/TelemetryContext';
+import React, { useState, useEffect } from "react";
 import {
   Ship,
   Radio,
   Clock,
-  Zap,
+  CloudLightning,
   AlertTriangle,
-  RotateCcw,
-} from 'lucide-react';
-import * as api from '../../services/api';
+  Download,
+  Database,
+  RefreshCw,
+  ChevronDown,
+} from "lucide-react";
+import { useTelemetry } from "../../context/TelemetryContext";
+import { AccountMenu } from "./AccountMenu";
 
-export const TopNavbar: React.FC = () => {
+interface TopNavbarProps {
+  onNavigateToHistory?: () => void;
+  onNavigateToCloud?: () => void;
+  onNavigateToUsers?: () => void;
+  onNavigateToAudit?: () => void;
+  onNavigateToAlarms?: () => void;
+}
+
+export const TopNavbar: React.FC<TopNavbarProps> = ({
+  onNavigateToHistory,
+  onNavigateToCloud,
+  onNavigateToUsers,
+  onNavigateToAudit,
+  onNavigateToAlarms,
+}) => {
   const {
-    connectionStatus,
-    latencySec,
+    cloudStatus,
     vessels,
     currentVesselId,
     setCurrentVesselId,
-    currentUser,
-    setCurrentUser,
-    triggerRocSpike,
-    resetSimulation,
+    alarmStats,
+    selectedDate,
+    setSelectedDate,
+    vpsStorageDates,
+    vpsActiveFile,
+    vpsOperationalContext,
+    isLoadingDateTelemetry,
+    isDataInitiated,
+    initiateDataRender,
+    resetToNotInitiated,
   } = useTelemetry();
 
-  const [utcTime, setUtcTime] = useState('');
-  const [simMenuOpen, setSimMenuOpen] = useState(false);
-  const [roleMenuOpen, setRoleMenuOpen] = useState(false);
+  const currentVessel = vessels.find((v) => v.vesselId === currentVesselId) || vessels[0];
+  const [utcTime, setUtcTime] = useState("");
 
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
-      const dateStr = now.toUTCString().slice(5, 16);
       const timeStr = now.toISOString().slice(11, 19);
-      setUtcTime(`${dateStr} | ${timeStr} UTC`);
+      setUtcTime(`${timeStr} UTC`);
     };
     updateTime();
     const interval = setInterval(updateTime, 1000);
     return () => clearInterval(interval);
   }, []);
 
-  const handleSwitchUser = async (user: UserProfile) => {
-    const prevUser = currentUser;
-    setCurrentUser(user);
-    setRoleMenuOpen(false);
-
-    try {
-      const activeVessel = vessels.find((v) => v.vesselId === currentVesselId);
-      await api.recordAuditEvent({
-        userId: user.userId,
-        userName: user.name,
-        userRole: user.role,
-        action: 'USER_ROLE_SWITCH',
-        vesselId: currentVesselId,
-        vesselName: activeVessel ? activeVessel.name : 'Commercial Tanker',
-        targetEntity: 'SCADA Workstation Session',
-        oldValue: `${prevUser.name} (${prevUser.role})`,
-        newValue: `${user.name} (${user.role})`,
-        details: `Operator identity switched on console workstation.`,
-      });
-    } catch (err) {
-      console.error('Audit logging role switch failed:', err);
-    }
-  };
-
-  const activeVesselName = vessels.find((v) => v.vesselId === currentVesselId)?.name || 'Vessel';
-
   return (
-    <header className="top-navbar">
-      {/* Left: Vessel Selector */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Ship size={18} color="var(--accent-cyan)" />
+    <header className="top-navbar-container">
+      {/* 1. LEFT ZONE: Streamlined Vessel Twin & Connection Gate */}
+      <div className="top-navbar-left">
+        {/* Vessel Switcher */}
+        <div className="vessel-selector-widget" title="Active Fleet Digital Twin">
+          <Ship size={15} className="text-cyan shrink-0" />
           <select
             id="vessel-select-dropdown"
             value={currentVesselId}
             onChange={(e) => setCurrentVesselId(e.target.value)}
-            style={{
-              background: 'var(--bg-card)',
-              color: '#fff',
-              border: '1px solid var(--border-medium)',
-              borderRadius: 'var(--radius-sm)',
-              padding: '6px 12px',
-              fontFamily: 'var(--font-heading)',
-              fontSize: '13px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              outline: 'none',
-            }}
+            className="vessel-header-select"
+            title="Switch Active Vessel Digital Twin"
           >
             {vessels.map((v) => (
               <option key={v.vesselId} value={v.vesselId}>
-                {v.name} (IMO {v.imo}) — {v.status}
+                {v.name}
               </option>
             ))}
           </select>
+          {currentVessel && <span className="vessel-imo-tag">IMO {currentVessel.imo || "9876543"}</span>}
+          <ChevronDown size={12} className="text-muted pointer-events-none" />
         </div>
 
-        {/* Telemetry Health Pill */}
-        <div
-          id="telemetry-health-pill"
-          className={`badge ${
-            connectionStatus === 'LIVE'
-              ? 'badge-live'
-              : connectionStatus === 'CONNECTING'
-              ? 'badge-warning'
-              : 'badge-offline'
+        {/* Unified Cloud & Telemetry Gateway Pill */}
+        <button
+          type="button"
+          onClick={onNavigateToCloud}
+          className={`system-status-pill ${
+            cloudStatus === "CONNECTED"
+              ? isDataInitiated
+                ? "status-rendered"
+                : "status-online"
+              : cloudStatus === "ERROR"
+              ? "status-error"
+              : "status-standby"
           }`}
-          title={`Gateway latency: ${(latencySec * 1000).toFixed(0)} ms`}
+          title={
+            isDataInitiated
+              ? `Telemetry Live: Rendering [${vpsActiveFile}]. Click for Cloud details.`
+              : `Cloud ${cloudStatus}. Click to inspect Cloud Ingestion gateway.`
+          }
         >
           <span
             className={`status-dot ${
-              connectionStatus === 'LIVE' ? 'live' : 'offline'
+              cloudStatus === "CONNECTED" ? "live" : "offline"
             }`}
           />
-          <Radio size={12} />
-          {connectionStatus === 'LIVE' ? `LIVE (${latencySec}s)` : connectionStatus}
-        </div>
-      </div>
-
-      {/* Center: Live UTC Clock */}
-      <div
-        id="utc-clock-display"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          color: 'var(--text-secondary)',
-          fontSize: '13px',
-          fontFamily: 'var(--font-mono)',
-        }}
-      >
-        <Clock size={15} color="var(--accent-cyan)" />
-        <span>{utcTime}</span>
-      </div>
-
-      {/* Right: Simulation Controller & Role Switcher */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        {/* Simulation Controls Trigger */}
-        <div style={{ position: 'relative' }}>
-          <button
-            id="sim-controls-btn"
-            className="btn btn-ghost"
-            style={{ borderColor: 'rgba(0, 240, 255, 0.3)', color: 'var(--accent-cyan)' }}
-            onClick={() => setSimMenuOpen(!simMenuOpen)}
-          >
-            <Zap size={15} />
-            <span>Simulate SCADA</span>
-          </button>
-
-          {simMenuOpen && (
-            <div
-              style={{
-                position: 'absolute',
-                top: '100%',
-                right: 0,
-                marginTop: '8px',
-                width: '280px',
-                background: 'var(--bg-surface)',
-                border: '1px solid var(--border-medium)',
-                borderRadius: 'var(--radius-md)',
-                padding: '12px',
-                boxShadow: 'var(--shadow-lg)',
-                zIndex: 50,
-              }}
-            >
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px', fontWeight: 600 }}>
-                SCADA EVENT INJECTION: {activeVesselName.toUpperCase()}
-              </div>
-              <button
-                id="trigger-roc-surge-btn"
-                className="btn btn-danger"
-                style={{ width: '100%', marginBottom: '8px', justifyContent: 'center', fontSize: '12px' }}
-                onClick={() => {
-                  triggerRocSpike('C05');
-                  setSimMenuOpen(false);
-                }}
-              >
-                <AlertTriangle size={14} />
-                Surge C05 Pressure (+4.5 mbar ROC)
-              </button>
-              <button
-                id="reset-sim-btn"
-                className="btn"
-                style={{ width: '100%', justifyContent: 'center', fontSize: '12px' }}
-                onClick={() => {
-                  resetSimulation();
-                  setSimMenuOpen(false);
-                }}
-              >
-                <RotateCcw size={14} />
-                Reset Normal Baseline
-              </button>
-            </div>
+          {cloudStatus === "CONNECTED" ? (
+            isDataInitiated ? (
+              <>
+                <Radio size={11} className="text-cyan animate-pulse" />
+                <span>STREAMING</span>
+              </>
+            ) : (
+              <>
+                <CloudLightning size={11} />
+                <span>CLOUD LIVE</span>
+              </>
+            )
+          ) : (
+            <>
+              <CloudLightning size={11} />
+              <span>CLOUD: {cloudStatus}</span>
+            </>
           )}
-        </div>
+        </button>
+      </div>
 
-        {/* User Role Switcher */}
-        <div style={{ position: 'relative' }}>
-          <button
-            id="user-role-switcher-btn"
-            className="btn"
-            style={{
-              background: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid var(--border-medium)',
-              gap: '10px',
+      {/* 2. CENTER ZONE: Compact VPS Date Controller Capsule */}
+      <div className="top-navbar-center">
+        <div className="vps-controller-card" title={vpsOperationalContext || "VPS Telemetry Repository"}>
+          <Database size={13} className="text-cyan shrink-0" />
+          <span className="text-muted text-2xs font-semibold uppercase tracking-wider hidden-mobile">
+            VPS:
+          </span>
+
+          {/* Compact Date Snapshot Select */}
+          <select
+            id="vps-date-select"
+            className="vps-dropdown-select"
+            value={selectedDate || ""}
+            disabled={isLoadingDateTelemetry}
+            onChange={(e) => {
+              if (e.target.value) setSelectedDate(e.target.value);
             }}
-            onClick={() => setRoleMenuOpen(!roleMenuOpen)}
           >
-            <div
-              style={{
-                width: '24px',
-                height: '24px',
-                borderRadius: '50%',
-                background: 'var(--accent-cyan-dim)',
-                color: 'var(--accent-cyan)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontWeight: 700,
-                fontSize: '11px',
-              }}
-            >
-              {currentUser.name[0]}
-            </div>
-            <div style={{ textAlign: 'left', lineHeight: 1.2 }}>
-              <div style={{ fontSize: '12px', fontWeight: 600 }}>{currentUser.name}</div>
-              <div style={{ fontSize: '10px', color: 'var(--accent-cyan)' }}>
-                {currentUser.rank}
-              </div>
-            </div>
-          </button>
+            {!isDataInitiated && <option value="">Select Date...</option>}
+            {vpsStorageDates.length > 0 ? (
+              vpsStorageDates.map((item) => (
+                <option key={item.date} value={item.date}>
+                  {item.date} ({item.operationalContext.split("—")[0].trim()})
+                </option>
+              ))
+            ) : (
+              <>
+                <option value="2026-10-12">2026-10-12 (Live Passage)</option>
+                <option value="2026-10-11">2026-10-11 (Rough Swell)</option>
+                <option value="2026-10-10">2026-10-10 (Cargo Alert)</option>
+                <option value="2026-10-09">2026-10-09 (Moored Berth)</option>
+                <option value="2026-10-08">2026-10-08 (IG Purge)</option>
+              </>
+            )}
+          </select>
 
-          {roleMenuOpen && (
-            <div
-              style={{
-                position: 'absolute',
-                top: '100%',
-                right: 0,
-                marginTop: '8px',
-                width: '280px',
-                background: 'var(--bg-surface)',
-                border: '1px solid var(--border-medium)',
-                borderRadius: 'var(--radius-md)',
-                padding: '8px',
-                boxShadow: 'var(--shadow-lg)',
-                zIndex: 50,
-              }}
-            >
-              <div style={{ padding: '8px', fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>
-                SWITCH ACTIVE ROLE &amp; AUDIT IDENTITY
-              </div>
-              {AVAILABLE_USERS.map((user: UserProfile) => (
-                <button
-                  key={user.userId}
-                  id={`select-role-${user.role.toLowerCase()}`}
-                  style={{
-                    width: '100%',
-                    textAlign: 'left',
-                    padding: '8px 12px',
-                    borderRadius: 'var(--radius-sm)',
-                    background: currentUser.userId === user.userId ? 'var(--accent-cyan-dim)' : 'transparent',
-                    border: 'none',
-                    color: currentUser.userId === user.userId ? 'var(--accent-cyan)' : 'var(--text-primary)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    marginBottom: '4px',
-                  }}
-                  onClick={() => handleSwitchUser(user)}
-                >
-                  <span style={{ fontSize: '12px', fontWeight: 600 }}>{user.name}</span>
-                  <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
-                    {user.rank} ({user.role})
-                  </span>
-                </button>
-              ))}
+          {/* Render or Standby Action Button */}
+          {isLoadingDateTelemetry ? (
+            <div className="flex-center px-2">
+              <RefreshCw size={12} className="text-cyan spin" />
             </div>
+          ) : isDataInitiated ? (
+            <button
+              id="btn-topbar-standby"
+              type="button"
+              onClick={resetToNotInitiated}
+              className="vps-action-btn btn-standby"
+              title="Return to Standby mode"
+            >
+              <span>⏹ Standby</span>
+            </button>
+          ) : (
+            <button
+              id="btn-topbar-initiate"
+              type="button"
+              onClick={() => initiateDataRender()}
+              className="vps-action-btn btn-render"
+              title="Render selected VPS date snapshot"
+            >
+              <Radio size={11} />
+              <span>⚡ Render</span>
+            </button>
           )}
         </div>
+      </div>
+
+      {/* 3. RIGHT ZONE: Critical Alarms, UTC Clock, & Executive Account Management */}
+      <div className="top-navbar-right">
+        {/* Critical Alarms Counter */}
+        {alarmStats.criticalCount > 0 && (
+          <button
+            type="button"
+            onClick={onNavigateToAlarms}
+            className="alarm-counter-pill pulse-critical"
+            title={`${alarmStats.criticalCount} Critical active alarms`}
+          >
+            <AlertTriangle size={12} />
+            <span>{alarmStats.criticalCount} CRIT</span>
+          </button>
+        )}
+
+        {/* Discreet UTC Clock */}
+        <div className="utc-clock-badge hidden-mobile" title="Coordinated Universal Time">
+          <Clock size={11} className="text-cyan" />
+          <span>{utcTime}</span>
+        </div>
+
+        {/* Quick CSV Export */}
+        {onNavigateToHistory && (
+          <button
+            type="button"
+            onClick={onNavigateToHistory}
+            className="header-icon-btn hidden-mobile"
+            title="Export Vessel Telemetry CSV"
+          >
+            <Download size={13} className="text-cyan" />
+          </button>
+        )}
+
+        {/* PROMINENT ACCOUNT MANAGEMENT COMPONENT */}
+        <AccountMenu
+          onNavigateToUsers={onNavigateToUsers}
+          onNavigateToAudit={onNavigateToAudit}
+          onNavigateToHistory={onNavigateToHistory}
+        />
       </div>
     </header>
   );

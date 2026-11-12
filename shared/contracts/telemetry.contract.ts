@@ -89,3 +89,20 @@ export type ManifoldPointSnapshot = {
   historicalMin: number;
   rateOfChangeBarPerMin: number;
 };
+
+export type TelemetryQuality = 'GOOD' | 'SUSPECT' | 'BAD' | 'UNKNOWN';
+
+export type NormalizedTelemetryEvent = {
+  vesselId: string;
+  deviceId: string;
+  tag: string;
+  value: number;
+  unit: string | null;
+  sourceState: string | null;
+  sourceLimit: number | null;
+  sourceMessage: string | null;
+  eventTimestamp: string;
+  receivedAt: string;
+  quality: TelemetryQuality;
+  differenceFromLimit: number | null;
+};
